@@ -1,0 +1,28 @@
+{
+	"name": "BesAll插件",
+	"id": "XM-BesAll",
+	"version": "v1.0.2023.11.12",
+	"description": "BesAll插件",
+	"_dp_type": "nativeplugin",
+	"_dp_nativeplugin": {
+		"android": {
+			"plugins": [{
+				"type": "module",
+				"name": "XM-BesAllModule",
+				"class": "com.xiaoming.plugin.besall.BesAllModule"
+			}],
+			"dependencies": [
+
+			],
+			"abis": [
+			    "armeabi-v7a"
+			],
+			"compileOptions": {
+				"sourceCompatibility": "1.8",
+				"targetCompatibility": "1.8"
+			},
+			"integrateType": "aar",
+			"minSdkVersion": "23"
+		}
+	}
+}
