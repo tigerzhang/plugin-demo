@@ -24,6 +24,7 @@
 	// 获取 module 
 	var sdkModule = uni.requireNativePlugin("XM-BesAllModule")
 	var testModule = uni.requireNativePlugin("TestModule")
+	const deviceProtocol = 16
 	// const modal = uni.requireNativePlugin('modal');
 	export default {
 		data() {
@@ -46,7 +47,7 @@
 
 				//不需要设置的参数请注释掉
 				sdkModule.initBleSDK({
-					deviceProtocol: 16 // 1:BLE, 16:SPP，初始化后不能随便修改
+					deviceProtocol: deviceProtocol // 1:BLE, 16:SPP，初始化后不能随便修改
 				}, (ret) => {
 					//扫描回调结果
 					console.log(ret)
@@ -137,29 +138,97 @@
 				});
 			},
 			startOTA() {
-				// 调用异步方法
-				var filePath = plus.io.convertLocalFileSystemURL('/static/HTS283_BS685HL_2500YP_SW_V3.2_release_converted.bin') //pdf文件所在路径
-				console.log(filePath)
-				sdkModule.startOTA({
-					localPath: filePath, //mac地址
-					mClearUserData: false, //清楚用户数据
-					mUpdateBtAddress: false, //是否更新蓝牙地址
-					btAddress: '',//新的蓝牙地址，必须满足规则才生效
-					mUpdateBtName: false, //是否更新蓝牙名称
-					btName: '',//蓝牙名称，不为空才生效
-					mUpdateBleAddress: false, //是否更新BLE地址
-					bleAddress: '',//新的BLE蓝牙地址，必须满足规则才生效
-					mUpdateBleName: false, //是否更新BLE蓝牙名称
-					bleName: '', //BLE蓝牙名称，不为空才生效
-					breakPoint: 0 //0不断点续传，1支持断点续传
-				}, (ret) => {
+				// 断开业务连接
+				sdkModule.disconnect((ret) => {
 					//扫描回调结果
-					console.log(ret)
+					console.log("disconnect", ret)
 					// modal.toast({
 					// 	//发送操作结果
 					// 	message: ret,
 					// 	duration: 1.5
 					// });
+
+					var connectFun = sdkModule.connect;
+					if (deviceProtocol === 16) {
+						// SPP 模式
+						connectFun = sdkModule.connectForOTAInSpp;
+					}
+					// 连接设备
+					connectFun({
+						/**
+						 * {"success":true,"msg":"onLeScan","data":{"mBleAddress":"1AF92E22-C653-272E-06AF-46D92E4B8963","mDeviceType":2,"mBleName":"Fuwinda 6199"}}
+						 */
+						macAddress: this.address,
+						deviceMac: this.classicalAddress
+					}, (ret) => {
+						//扫描回调结果
+						console.log("connect", ret)
+						// modal.toast({
+						// 	//发送操作结果
+						// 	message: ret,
+						// 	duration: 1.5
+						// });
+
+						// 连接失败，直接返回
+						if (!ret.success) {
+							return;
+						}
+
+						// 调用异步方法
+						var filePath = plus.io.convertLocalFileSystemURL('/static/HTS283_BS685HL_2500YP_SW_V3.2_release_converted.bin') //pdf文件所在路径
+						console.log(filePath)
+						sdkModule.startOTA({
+							localPath: filePath, //mac地址
+							mClearUserData: false, //清楚用户数据
+							mUpdateBtAddress: false, //是否更新蓝牙地址
+							btAddress: '',//新的蓝牙地址，必须满足规则才生效
+							mUpdateBtName: false, //是否更新蓝牙名称
+							btName: '',//蓝牙名称，不为空才生效
+							mUpdateBleAddress: false, //是否更新BLE地址
+							bleAddress: '',//新的BLE蓝牙地址，必须满足规则才生效
+							mUpdateBleName: false, //是否更新BLE蓝牙名称
+							bleName: '', //BLE蓝牙名称，不为空才生效
+							breakPoint: 0 //0不断点续传，1支持断点续传
+						}, (ret) => {
+							//扫描回调结果
+							console.log("startOTA", ret)
+							// modal.toast({
+							// 	//发送操作结果
+							// 	message: ret,
+							// 	duration: 1.5
+							// });
+
+							setTimeout(() => {
+								// OTA 结束后，断开连接。重新建立业务连接
+								sdkModule.disconnect((ret) => {
+									//扫描回调结果
+									console.log("disconnect", ret)
+									// modal.toast({
+									// 	//发送操作结果
+									// 	message: ret,
+									// 	duration: 1.5
+									// });
+
+									// 重新连接
+									sdkModule.connect({
+										/**
+										 * {"success":true,"msg":"onLeScan","data":{"mBleAddress":"1AF92E22-C653-272E-06AF-46D92E4B8963","mDeviceType":2,"mBleName":"Fuwinda 6199"}}
+										 */
+										macAddress: this.address,
+										deviceMac: this.classicalAddress
+									}, (ret) => {
+										//扫描回调结果
+										console.log("connect", ret)
+										// modal.toast({
+										// 	//发送操作结果
+										// 	message: ret,
+										// 	duration: 1.5
+										// });
+									});
+								});
+							}, 3000); // 等待耳机重启完成
+						});
+					});
 				});
 			},
 			cancelOTA() {
