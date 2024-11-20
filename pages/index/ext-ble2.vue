@@ -23,7 +23,7 @@
 <script>
 	// 获取 module 
 	var sdkModule = uni.requireNativePlugin("XM-BesAllModule")
-	var testModule = uni.requireNativePlugin("TestModule")
+	// var testModule = uni.requireNativePlugin("TestModule")
 	const deviceProtocol = 16
 	// const modal = uni.requireNativePlugin('modal');
 	export default {
@@ -43,7 +43,7 @@
 		methods: {
 			//初始化
 			initBleSDK() {
-				testModule.init();
+				// testModule.init();
 
 				//不需要设置的参数请注释掉
 				sdkModule.initBleSDK({
