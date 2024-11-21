@@ -12,7 +12,8 @@
 		<button type="primary" @click="disconnect">断开连接</button>
 		<button type="primary" @click="startOTA">开始OTA</button>
 		<button type="primary" @click="cancelOTA">取消OTA</button>
-		<button type="primary" @click="sendTestData">发送数据</button>
+		<button type="primary" @click="startCallingRecord">开始通话录音</button>
+		<button type="primary" @click="stopCallingRecord">结束通话录音</button>
 		<button type="primary" @click="sendTestData2">发送心跳</button>
 		<button type="primary" @click="registerDataCallback">注册监听器</button>
 		<button type="primary" @click="unRegisterDataCallback">取消注册监听器</button>
@@ -24,8 +25,12 @@
 	// 获取 module 
 	var sdkModule = uni.requireNativePlugin("XM-BesAllModule")
 	// var testModule = uni.requireNativePlugin("TestModule")
-	const deviceProtocol = 16
+	var deviceProtocol = 1 // 1:BLE, 16:SPP
 	// const modal = uni.requireNativePlugin('modal');
+	// 是否在录音
+	var isRecording = false
+	// char 数据，保存录音
+	var pcmData = []
 	export default {
 		data() {
 			return {
@@ -41,9 +46,31 @@
 
 		},
 		methods: {
+			getMacAddress() {
+				var platform = uni.getSystemInfoSync().platform;
+				// Android
+				if (platform === 'android') {
+					return this.address;
+				} else if (platform === 'ios') {
+					// iOS
+					return "A69C430A-92A5-CEDD-FFE1-B7958A028711"; // tz test device ios ble address
+				}
+			},
 			//初始化
 			initBleSDK() {
 				// testModule.init();
+				sdkModule.init({
+					enableDenoise: false
+				})
+
+				// 如果是 iOS 平台，deviceProtocol 设置为 1
+				// 如果是 Android 平台，deviceProtocol 设置为 16。Android 平台上 1 也能工作。
+				var platform = uni.getSystemInfoSync().platform;
+				if (platform === 'android') {
+					deviceProtocol = 16;
+				} else if (platform === 'ios') {
+					deviceProtocol = 1;
+				}
 
 				//不需要设置的参数请注释掉
 				sdkModule.initBleSDK({
@@ -92,7 +119,7 @@
 					//扫描回调结果
 					console.log(ret)
 					if (ret.success) {
-						if (ret.data.deviceId == this.address) {
+						if (ret.data.deviceId == this.getMacAddress()) {
 							console.log('检测到指定设备', ret)
 						} else {
 							console.log('检测到其他设备')
@@ -114,7 +141,7 @@
 					/**
 					 * {"success":true,"msg":"onLeScan","data":{"mBleAddress":"1AF92E22-C653-272E-06AF-46D92E4B8963","mDeviceType":2,"mBleName":"Fuwinda 6199"}}
 					 */
-					macAddress: this.address,
+					macAddress: this.getMacAddress(),
 					deviceMac: this.classicalAddress
 				}, (ret) => {
 					//扫描回调结果
@@ -148,6 +175,7 @@
 					// 	duration: 1.5
 					// });
 
+					console.log("deviceProtocol", deviceProtocol);
 					var connectFun = sdkModule.connect;
 					if (deviceProtocol === 16) {
 						// SPP 模式
@@ -158,7 +186,7 @@
 						/**
 						 * {"success":true,"msg":"onLeScan","data":{"mBleAddress":"1AF92E22-C653-272E-06AF-46D92E4B8963","mDeviceType":2,"mBleName":"Fuwinda 6199"}}
 						 */
-						macAddress: this.address,
+						macAddress: this.getMacAddress(),
 						deviceMac: this.classicalAddress
 					}, (ret) => {
 						//扫描回调结果
@@ -214,7 +242,7 @@
 										/**
 										 * {"success":true,"msg":"onLeScan","data":{"mBleAddress":"1AF92E22-C653-272E-06AF-46D92E4B8963","mDeviceType":2,"mBleName":"Fuwinda 6199"}}
 										 */
-										macAddress: this.address,
+										macAddress: this.getMacAddress(),
 										deviceMac: this.classicalAddress
 									}, (ret) => {
 										//扫描回调结果
@@ -242,18 +270,60 @@
 					// });
 				});
 			},
-			sendTestData() {
+			startCallingRecord() {
+				// 创建一个文件，用于保存录音数据
+				isRecording = true
+				pcmData = []
+				sdkModule.startRecord(
+					(ret) => {
+						console.log('record', ret)
+						// append ret.data to pcmData
+						pcmData.push(...ret.data)
+					});
+			},
+			stopCallingRecord() {
+				// 等待 3s，结束录音，确保所有数据都接收到
+				// 开启定时器
+				setTimeout(() => {
+					isRecording = false
+
+					// 将 pcmData 转为 Uint8Array
+					var pcmDataArray = new Uint8Array(pcmData)
+					// console.log('pcmDataArray', pcmDataArray)
+					// 写入 plugin-demo-pcm.wave 文件
+					plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, function(fs) {
+						fs.root.getFile('plugin-demo-pcm.wav', {
+							create: true
+						}, function(fileEntry) {
+							fileEntry.createWriter(function(writer) {
+								writer.onwrite = function(e) {
+									console.log('write success')
+
+									// 播放录音
+									// const innerAudioContext = uni.createInnerAudioContext();
+									// innerAudioContext.src = plus.io.convertLocalFileSystemURL('/plugin-demo-pcm.wav');
+									// innerAudioContext.play();
+								}
+								writer.onerror = function(e) {
+									console.log('write error')
+								}
+								writer.write(pcmDataArray)
+							}, function(e) {
+								console.log('create writer error')
+							})
+						}, function(e) {
+							console.log('create file error')
+						})
+					}, function(e) {
+						console.log('request file system error')
+					})
+				}, 5000)
+
 				sdkModule.write({
-					hexStr: '5aa501'
+					hexStr: '5aa503'
 				}, (ret) => {
-					//扫描回调结果
-					console.log(ret)
-					// modal.toast({
-					// 	//发送操作结果
-					// 	message: ret,
-					// 	duration: 1.5
-					// });
-				});
+					console.log('stopCallingRecord', ret)
+				})
 			},
 			sendTestData2() {
 				sdkModule.write({
@@ -271,7 +341,7 @@
 			registerDataCallback() {
 				sdkModule.registerDataCallback((ret) => {
 					//扫描回调结果
-					console.log(ret)
+					console.log('callback', ret)
 					// modal.toast({
 					// 	//发送操作结果
 					// 	message: ret,
