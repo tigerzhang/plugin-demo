@@ -14,6 +14,7 @@
 		<button type="primary" @click="cancelOTA">取消OTA</button>
 		<button type="primary" @click="startCallingRecord">开始通话录音</button>
 		<button type="primary" @click="stopCallingRecord">结束通话录音</button>
+		<button type="primary" @click="startMicrophoneRecord">开始麦克风录音</button>
 		<button type="primary" @click="sendTestData2">发送心跳</button>
 		<button type="primary" @click="registerDataCallback">注册监听器</button>
 		<button type="primary" @click="unRegisterDataCallback">取消注册监听器</button>
@@ -46,6 +47,33 @@
 
 		},
 		methods: {
+			// export file
+			exportFile(filepath) {
+				console.log('exportFile', filepath);
+				// if the OS is iOS, use UIActivityViewController to share the file
+				if (plus.os.name === 'iOS') {
+					var UIActivityViewController = plus.ios.importClass('UIActivityViewController');
+					var NSURL = plus.ios.importClass('NSURL');
+
+					var url = NSURL.fileURLWithPath(filepath, false);
+					var activityItems = UIActivityViewController.alloc().initWithActivityItems([url], null);
+					var app = plus.ios.invoke('UIApplication', 'sharedApplication');
+					var window = app.keyWindow;
+					var rootViewController = window.rootViewController;
+					rootViewController.presentViewController(activityItems, true, null);
+				} else {
+					// if the OS is Android, use Intent.ACTION_SEND to share the file
+					var Intent = plus.android.importClass('android.content.Intent');
+					var Uri = plus.android.importClass('android.net.Uri');
+					var File = plus.android.importClass('java.io.File');
+					var intent = new Intent();
+					intent.setAction(Intent.ACTION_SEND);
+					var uri = Uri.fromFile(new File(filepath));
+					intent.putExtra(Intent.EXTRA_STREAM, uri);
+					intent.setType('*/*');
+					plus.android.runtimeMainActivity().startActivity(Intent.createChooser(intent, 'Share'));
+				}
+			},
 			getMacAddress() {
 				var platform = uni.getSystemInfoSync().platform;
 				// Android
@@ -59,9 +87,17 @@
 			//初始化
 			initBleSDK() {
 				// testModule.init();
-				sdkModule.init({
-					enableDenoise: false
-				})
+				console.log("initBleSDK os", plus.os.name);
+				if (plus.os.name === 'iOS') {
+					// iOS 平台
+					sdkModule.init({
+						enableDenoise: true
+					});
+				} else {
+					// Android 平台
+					// public Long init(boolean isNewDecoder, boolean enableDenoise, boolean debug)
+					sdkModule.init(true, true, false)
+				}
 
 				// 如果是 iOS 平台，deviceProtocol 设置为 1
 				// 如果是 Android 平台，deviceProtocol 设置为 16。Android 平台上 1 也能工作。
@@ -226,35 +262,36 @@
 							// 	duration: 1.5
 							// });
 
-							setTimeout(() => {
-								// OTA 结束后，断开连接。重新建立业务连接
-								sdkModule.disconnect((ret) => {
-									//扫描回调结果
-									console.log("disconnect", ret)
-									// modal.toast({
-									// 	//发送操作结果
-									// 	message: ret,
-									// 	duration: 1.5
-									// });
+							// OTA 成功后，重连
+							// setTimeout(() => {
+							// 	// OTA 结束后，断开连接。重新建立业务连接
+							// 	sdkModule.disconnect((ret) => {
+							// 		//扫描回调结果
+							// 		console.log("disconnect", ret)
+							// 		// modal.toast({
+							// 		// 	//发送操作结果
+							// 		// 	message: ret,
+							// 		// 	duration: 1.5
+							// 		// });
 
-									// 重新连接
-									sdkModule.connect({
-										/**
-										 * {"success":true,"msg":"onLeScan","data":{"mBleAddress":"1AF92E22-C653-272E-06AF-46D92E4B8963","mDeviceType":2,"mBleName":"Fuwinda 6199"}}
-										 */
-										macAddress: this.getMacAddress(),
-										deviceMac: this.classicalAddress
-									}, (ret) => {
-										//扫描回调结果
-										console.log("connect", ret)
-										// modal.toast({
-										// 	//发送操作结果
-										// 	message: ret,
-										// 	duration: 1.5
-										// });
-									});
-								});
-							}, 3000); // 等待耳机重启完成
+							// 		// 重新连接
+							// 		sdkModule.connect({
+							// 			/**
+							// 			 * {"success":true,"msg":"onLeScan","data":{"mBleAddress":"1AF92E22-C653-272E-06AF-46D92E4B8963","mDeviceType":2,"mBleName":"Fuwinda 6199"}}
+							// 			 */
+							// 			macAddress: this.getMacAddress(),
+							// 			deviceMac: this.classicalAddress
+							// 		}, (ret) => {
+							// 			//扫描回调结果
+							// 			console.log("connect", ret)
+							// 			// modal.toast({
+							// 			// 	//发送操作结果
+							// 			// 	message: ret,
+							// 			// 	duration: 1.5
+							// 			// });
+							// 		});
+							// 	});
+							// }, 3000); // 等待耳机重启完成
 						});
 					});
 				});
@@ -271,58 +308,84 @@
 				});
 			},
 			startCallingRecord() {
+				this.startRecord(1)
+			},
+			startMicrophoneRecord() {
+				this.startRecord(2)
+			},
+			startRecord(mode) {
+				var func = sdkModule.startRecord
+				if (mode === 1) {
+					func = sdkModule.startRecord
+				} else if (mode === 2) {
+					func = sdkModule.sceneRecord
+				} else if (mode === 3) {
+					func = sdkModule.audioVideoRecord
+				}
 				// 创建一个文件，用于保存录音数据
 				isRecording = true
 				pcmData = []
 				sdkModule.startRecord(
 					(ret) => {
-						console.log('record', ret)
+						// console.log('record', ret)
+						console.log('record', ret.success, ret.data.length)
 						// append ret.data to pcmData
 						pcmData.push(...ret.data)
 					});
 			},
 			stopCallingRecord() {
-				// 等待 3s，结束录音，确保所有数据都接收到
-				// 开启定时器
-				setTimeout(() => {
+				sdkModule.write({
+					hexStr: '5aa503'
+				}, (ret) => {
+					console.log('stopCallingRecord', ret)
+
 					isRecording = false
 
 					// 将 pcmData 转为 Uint8Array
 					var pcmDataArray = new Uint8Array(pcmData)
 					// console.log('pcmDataArray', pcmDataArray)
 					// 写入 plugin-demo-pcm.wave 文件
-					plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, function(fs) {
-						fs.root.getFile('plugin-demo-pcm.wav', {
-							create: true
-						}, function(fileEntry) {
-							fileEntry.createWriter(function(writer) {
-								writer.onwrite = function(e) {
-									console.log('write success')
-
-									// 播放录音
-									// const innerAudioContext = uni.createInnerAudioContext();
-									// innerAudioContext.src = plus.io.convertLocalFileSystemURL('/plugin-demo-pcm.wav');
-									// innerAudioContext.play();
-								}
-								writer.onerror = function(e) {
-									console.log('write error')
-								}
-								writer.write(pcmDataArray)
-							}, function(e) {
-								console.log('create writer error')
+					console.log('write file', pcmDataArray.length);
+					const pcmFilePath = '_doc/plugin-demo-pcm.wav';
+					// check is plus ready
+					if (!plus) {
+						console.log('plus is not ready');
+						return;
+					}
+					plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+						dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
+							dirEntry.getFile('plugin-demo-pcm.pcm', {
+								create: true
+							}, (fileEntry) => {
+								fileEntry.createWriter((writer) => {
+									writer.onwrite = function(e) {
+										console.log('write success', e);
+										// export file
+										// this.exportFile(pcmFilePath);
+									};
+									writer.onerror = function(e) {
+										console.log('write error', e);
+									};
+									console.log('write ' + pcmDataArray.length);
+									// FIXME: 这里写二进制会失败，文件大小为0
+									// 暂时写入字符串，然后用工具转为二进制
+									// convert_comma_split_array_to_raw.py: 转化为二进制文件
+									// split-channels.py: 分离左右声道
+									var str = pcmDataArray.toString();
+									console.log('str', str);
+									writer.write(str);
+								}, (e) => {
+									console.log('createWriter error', e);
+								});
+							}, (e) => {
+								console.log('getFile error', e);
 							})
-						}, function(e) {
-							console.log('create file error')
+						}, (e) => {
+							console.log('getDirectory error', e);
 						})
-					}, function(e) {
-						console.log('request file system error')
-					})
-				}, 5000)
-
-				sdkModule.write({
-					hexStr: '5aa503'
-				}, (ret) => {
-					console.log('stopCallingRecord', ret)
+					}, (e) => {
+						console.log('requestFileSystem error', e);
+					});
 				})
 			},
 			sendTestData2() {
