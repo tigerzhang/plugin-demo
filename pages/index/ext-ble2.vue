@@ -19,6 +19,7 @@
 		<button type="primary" @click="registerDataCallback">注册监听器</button>
 		<button type="primary" @click="unRegisterDataCallback">取消注册监听器</button>
 		<button type="primary" @click="decoderOpus">解码opus</button>
+		<button type="primary" @click="exportFile">导出文件</button>
 	</div>
 </template>
 
@@ -47,8 +48,65 @@
 
 		},
 		methods: {
+			exportFile() {
+				var that = this;
+				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+					dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
+						dirEntry.getFile('plugin-demo-pcm.pcm', {
+							create: true
+						}, (fileEntry) => {
+							// path of fileEntry
+							console.log('fileEntry', fileEntry.fullPath);
+							// that.exportFile(fileEntry.fullPath)
+							if (plus.os.name === 'iOS') {
+								uni.openDocument({
+									filePath: fileEntry.fullPath,
+									fileType: 'wav',
+									success: function(res) {
+										console.log('open document success');
+									},
+									fail: function(err) {
+										console.log('open document fail', err);
+									}
+								})
+								// var UIActivityViewController = plus.ios.importClass('UIActivityViewController');
+								// var NSURL2 = plus.ios.importClass('NSURL');
+
+								// // var url = plus.ios.invoke(NSURL, 'fileURLWithPath:', fileEntry.fullPath);
+								// var url = NSURL2.fileURLWithPath(fileEntry.fullPath);
+
+								// console.log("url == ");
+								// console.log(url);
+
+								// var activityViewController = new UIActivityViewController();
+								// var activityItems = plus.ios.invoke(activityViewController, "initWithActivityItems:applicationActivities:", [url], null);
+
+								// console.log("activityItems == ");
+								// console.log(activityItems);
+
+								// var UIApplicationClass = plus.ios.importClass("UIApplication");
+								// var UIAppObj = UIApplicationClass.sharedApplication();
+								// var delegate = plus.ios.invoke(UIAppObj, "delegate");
+								// var appWindowObj = plus.ios.invoke(delegate, "window");
+								// var appRootController = plus.ios.invoke(appWindowObj, "rootViewController");
+
+								// console.log("appRootController == ");  
+								// console.log(appRootController);  
+
+								// plus.ios.invoke(appRootController, 'presentViewController:animated:completion:', activityItems, "YES", null);
+							} 
+						}, (e) => {
+							console.log('getFile error', e);
+						})
+					}, (e) => {
+						console.log('getDirectory error', e);
+					})
+				}, (e) => {
+					console.log('requestFileSystem error', e);
+				});
+			},
 			// export file
-			exportFile(filepath) {
+			exportFilePath(filepath) {
 				console.log('exportFile', filepath);
 				// if the OS is iOS, use UIActivityViewController to share the file
 				if (plus.os.name === 'iOS') {
@@ -334,9 +392,7 @@
 					});
 			},
 			stopCallingRecord() {
-				sdkModule.write({
-					hexStr: '5aa503'
-				}, (ret) => {
+				sdkModule.stopRecord((ret) => {
 					console.log('stopCallingRecord', ret)
 
 					isRecording = false
@@ -346,12 +402,13 @@
 					// console.log('pcmDataArray', pcmDataArray)
 					// 写入 plugin-demo-pcm.wave 文件
 					console.log('write file', pcmDataArray.length);
-					const pcmFilePath = '_doc/plugin-demo-pcm.wav';
+					const pcmFilePath = 'pcm/plugin-demo-pcm.wav';
 					// check is plus ready
 					if (!plus) {
 						console.log('plus is not ready');
 						return;
 					}
+					var that = this;
 					plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
 						dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
 							dirEntry.getFile('plugin-demo-pcm.pcm', {
@@ -361,7 +418,10 @@
 									writer.onwrite = function(e) {
 										console.log('write success', e);
 										// export file
-										// this.exportFile(pcmFilePath);
+										// path on android: /storage/emulated/0/Android/data/com.android.UniPlugin/documents/pcm/plugin-demo-pcm.pcm
+										// path of fileEntry
+										console.log('fileEntry', fileEntry.fullPath);
+										// that.exportFile(fileEntry.fullPath)
 									};
 									writer.onerror = function(e) {
 										console.log('write error', e);
