@@ -13,7 +13,7 @@
 		<button type="primary" @click="startOTA">开始OTA</button>
 		<button type="primary" @click="cancelOTA">取消OTA</button>
 		<button type="primary" @click="startCallingRecord">开始通话录音</button>
-		<button type="primary" @click="stopCallingRecord">结束通话录音</button>
+		<button type="primary" @click="stopCallingRecord">结束录音</button>
 		<button type="primary" @click="startMicrophoneRecord">开始麦克风录音</button>
 		<button type="primary" @click="sendTestData2">发送心跳</button>
 		<button type="primary" @click="registerDataCallback">注册监听器</button>
@@ -154,7 +154,11 @@
 				} else {
 					// Android 平台
 					// public Long init(boolean isNewDecoder, boolean enableDenoise, boolean debug)
-					sdkModule.init(true, true, false)
+					sdkModule.init({
+						enableDenoise: true
+					}, (ret) => {
+						console.log('init', ret);
+					});
 				}
 
 				// 如果是 iOS 平台，deviceProtocol 设置为 1
@@ -395,57 +399,60 @@
 				sdkModule.stopRecord((ret) => {
 					console.log('stopCallingRecord', ret)
 
-					isRecording = false
+					// delay 5s to make sure the record is finished
+					setTimeout(() => {
+						isRecording = false
 
-					// 将 pcmData 转为 Uint8Array
-					var pcmDataArray = new Uint8Array(pcmData)
-					// console.log('pcmDataArray', pcmDataArray)
-					// 写入 plugin-demo-pcm.wave 文件
-					console.log('write file', pcmDataArray.length);
-					const pcmFilePath = 'pcm/plugin-demo-pcm.wav';
-					// check is plus ready
-					if (!plus) {
-						console.log('plus is not ready');
-						return;
-					}
-					var that = this;
-					plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
-						dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
-							dirEntry.getFile('plugin-demo-pcm.pcm', {
-								create: true
-							}, (fileEntry) => {
-								fileEntry.createWriter((writer) => {
-									writer.onwrite = function(e) {
-										console.log('write success', e);
-										// export file
-										// path on android: /storage/emulated/0/Android/data/com.android.UniPlugin/documents/pcm/plugin-demo-pcm.pcm
-										// path of fileEntry
-										console.log('fileEntry', fileEntry.fullPath);
-										// that.exportFile(fileEntry.fullPath)
-									};
-									writer.onerror = function(e) {
-										console.log('write error', e);
-									};
-									console.log('write ' + pcmDataArray.length);
-									// FIXME: 这里写二进制会失败，文件大小为0
-									// 暂时写入字符串，然后用工具转为二进制
-									// convert_comma_split_array_to_raw.py: 转化为二进制文件
-									// split-channels.py: 分离左右声道
-									var str = pcmDataArray.toString();
-									console.log('str', str);
-									writer.write(str);
+						// 将 pcmData 转为 Uint8Array
+						var pcmDataArray = new Uint8Array(pcmData)
+						// console.log('pcmDataArray', pcmDataArray)
+						// 写入 plugin-demo-pcm.wave 文件
+						console.log('write file', pcmDataArray.length);
+						const pcmFilePath = 'pcm/plugin-demo-pcm.wav';
+						// check is plus ready
+						if (!plus) {
+							console.log('plus is not ready');
+							return;
+						}
+						var that = this;
+						plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+							dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
+								dirEntry.getFile('plugin-demo-pcm.pcm', {
+									create: true
+								}, (fileEntry) => {
+									fileEntry.createWriter((writer) => {
+										writer.onwrite = function(e) {
+											console.log('write success', e);
+											// export file
+											// path on android: /storage/emulated/0/Android/data/com.android.UniPlugin/documents/pcm/plugin-demo-pcm.pcm
+											// path of fileEntry
+											console.log('fileEntry', fileEntry.fullPath);
+											// that.exportFile(fileEntry.fullPath)
+										};
+										writer.onerror = function(e) {
+											console.log('write error', e);
+										};
+										console.log('write ' + pcmDataArray.length);
+										// FIXME: 这里写二进制会失败，文件大小为0
+										// 暂时写入字符串，然后用工具转为二进制
+										// convert_comma_split_array_to_raw.py: 转化为二进制文件
+										// split-channels.py: 分离左右声道
+										var str = pcmDataArray.toString();
+										console.log('str', str);
+										writer.write(str);
+									}, (e) => {
+										console.log('createWriter error', e);
+									});
 								}, (e) => {
-									console.log('createWriter error', e);
-								});
+									console.log('getFile error', e);
+								})
 							}, (e) => {
-								console.log('getFile error', e);
+								console.log('getDirectory error', e);
 							})
 						}, (e) => {
-							console.log('getDirectory error', e);
-						})
-					}, (e) => {
-						console.log('requestFileSystem error', e);
-					});
+							console.log('requestFileSystem error', e);
+						});
+					}, 5000);
 				})
 			},
 			sendTestData2() {
