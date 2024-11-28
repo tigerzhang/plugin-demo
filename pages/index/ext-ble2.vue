@@ -235,21 +235,26 @@
 				sdkModule.stopScan();
 			},
 			connect() {
-				sdkModule.connect({
-					/**
-					 * {"success":true,"msg":"onLeScan","data":{"mBleAddress":"1AF92E22-C653-272E-06AF-46D92E4B8963","mDeviceType":2,"mBleName":"Fuwinda 6199"}}
-					 */
-					macAddress: this.getMacAddress(),
-					deviceMac: this.classicalAddress
-				}, (ret) => {
-					//扫描回调结果
-					console.log(ret)
-					// modal.toast({
-					// 	//发送操作结果
-					// 	message: ret,
-					// 	duration: 1.5
-					// });
-				});
+				sdkModule.disconnect((ret) => {
+					console.log('disconnect', ret);
+					setTimeout(() => {
+						sdkModule.connect({
+							/**
+							 * {"success":true,"msg":"onLeScan","data":{"mBleAddress":"1AF92E22-C653-272E-06AF-46D92E4B8963","mDeviceType":2,"mBleName":"Fuwinda 6199"}}
+							 */
+							macAddress: this.getMacAddress(),
+							deviceMac: this.classicalAddress
+						}, (ret) => {
+							//扫描回调结果
+							console.log("connect",ret)
+							// modal.toast({
+							// 	//发送操作结果
+							// 	message: ret,
+							// 	duration: 1.5
+							// });
+						});
+					}, 3000);
+				})
 			},
 			disconnect() {
 				sdkModule.disconnect((ret) => {
