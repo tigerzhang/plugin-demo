@@ -207,16 +207,11 @@
 							});
 
 							// 4. 开启定时心跳
-							if (this.heartbeatInterval) {
-								clearInterval(this.heartbeatInterval);
-							}
-							this.heartbeatInterval = setInterval(() => {
-								sdkModule.write({
-									hexStr: '5aa500'
-								}, (ret) => {
-									console.log(ret)
-								});
-							}, 2000);
+							sdkModule.startSendBLEHeartbeatPack({
+								timeDuration: 2000
+							}, (ret) => {
+								console.log('startSendBLEHeartbeatPack', ret)
+							});
 
 							// 5. 开始录音
 							// 创建一个文件，用于保存录音数据
