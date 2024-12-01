@@ -1,7 +1,15 @@
 <template>
 
 	<div>
-		<text>BLE蓝牙相关接口</text>
+		<div>
+			<text>BLE蓝牙相关接口</text>
+		</div>
+		<div>
+			<!-- heartbeat status, data length received -->
+			<text>心跳状态: {{heartbeatInterval ? '开启' : '关闭'}} {{heartbeatStatusIcon}}</text>
+			<text>数据长度: {{pcmDataReceived}}</text>
+		</div>
+		<button type="primary" @click="microphoneRecording">麦克风录音完整流程</button>
 		<button type="primary" @click="initBleSDK">初始化</button>
 		<button type="primary" @click="isBlueEnable">蓝牙是否开启</button>
 		<button type="primary" @click="enableBluetooth">打开蓝牙</button>
@@ -10,6 +18,8 @@
 		<button type="primary" @click="stopScan">停止扫描</button>
 		<button type="primary" @click="connect">连接</button>
 		<button type="primary" @click="disconnect">断开连接</button>
+		<button type="primary" @click="startHeartBeat">开启定时心跳</button>
+		<button type="primary" @click="stopHeartBeat">关闭定时心跳</button>
 		<button type="primary" @click="startOTA">开始OTA</button>
 		<button type="primary" @click="cancelOTA">取消OTA</button>
 		<button type="primary" @click="startCallingRecord">开始通话录音</button>
@@ -39,15 +49,21 @@
 				// address: "94F206C6-42EE-8395-3CE1-3A8F15FA57FD"
 				// address: "EE:11:22:33:C1:79"//By Macro
 				address: "EE:11:22:33:3D:78", // tz test device ble address
-				classicalAddress: "11:11:22:33:3D:78" // tz test device classical address
+				classicalAddress: "11:11:22:33:3D:78", // tz test device classical address
 				// address: "EE:11:22:33:BF:84", // tz xl test device ble address
 				// classicalAddress: "11:11:22:33:BF:84" // tz xl test device classical address
+				pcmDataReceived: 0,
+				heartbeatInterval: null,
+				heartbeatStatusIcon: '❌'
 			}
 		},
 		onLoad() {
 
 		},
 		methods: {
+			toast(message) {
+				plus.nativeUI.toast(message);
+			},
 			exportFile() {
 				var that = this;
 				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
@@ -142,6 +158,84 @@
 					return "A69C430A-92A5-CEDD-FFE1-B7958A028711"; // tz test device ios ble address
 				}
 			},
+			microphoneRecording() {
+				// 1. 初始化
+				sdkModule.init({
+					enableDenoise: true
+				}, (ret) => {
+					console.log('init', ret);
+
+					// 如果是 iOS 平台，deviceProtocol 设置为 1
+					// 如果是 Android 平台，deviceProtocol 设置为 16。Android 平台上 1 也能工作。
+					var platform = uni.getSystemInfoSync().platform;
+					if (platform === 'android') {
+						deviceProtocol = 16;
+					} else if (platform === 'ios') {
+						deviceProtocol = 1;
+					}
+
+					//不需要设置的参数请注释掉
+					sdkModule.initBleSDK({
+						deviceProtocol: deviceProtocol // 1:BLE, 16:SPP，初始化后不能随便修改
+					}, (ret) => {
+						//扫描回调结果
+						console.log(ret)
+						this.toast(JSON.stringify(ret));
+						// 2. 连接设备
+						sdkModule.connect({
+							/**
+							 * {"success":true,"msg":"onLeScan","data":{"mBleAddress":"1AF92E22-C653-272E-06AF-46D92E4B8963","mDeviceType":2,"mBleName":"Fuwinda 6199"}}
+							 */
+							macAddress: this.getMacAddress(),
+							deviceMac: this.classicalAddress
+						}, (ret) => {
+							console.log("connect", ret)
+							this.toast(JSON.stringify(ret));
+
+							// 3. 注册回调
+							sdkModule.registerDataCallback((ret) => {
+								console.log('callback', ret)
+								// this.toast(JSON.stringify(ret));
+								// if ret.data is "5bb500", it's a heartbeat response
+								if (ret.data === '5bb500') {
+									if (this.heartbeatStatusIcon === '✅') {
+										this.heartbeatStatusIcon = '❌'
+									} else {
+										this.heartbeatStatusIcon = '✅'
+									}
+								}
+							});
+
+							// 4. 开启定时心跳
+							if (this.heartbeatInterval) {
+								clearInterval(this.heartbeatInterval);
+							}
+							this.heartbeatInterval = setInterval(() => {
+								sdkModule.write({
+									hexStr: '5aa500'
+								}, (ret) => {
+									console.log(ret)
+								});
+							}, 2000);
+
+							// 5. 开始录音
+							// 创建一个文件，用于保存录音数据
+							isRecording = true
+							pcmData = []
+							sdkModule.sceneRecord(
+								(ret) => {
+									// console.log('record', ret)
+									console.log('record', ret.success, ret.data.length)
+									// this.toast('record ' + ret.success + ' ' + ret.data.length)
+									// append ret.data to pcmData
+									pcmData.push(...ret.data)
+									this.pcmDataReceived += ret.data.length
+							});
+						});
+					});
+
+				});
+			},
 			//初始化
 			initBleSDK() {
 				// testModule.init();
@@ -176,37 +270,26 @@
 				}, (ret) => {
 					//扫描回调结果
 					console.log(ret)
-					// modal.toast({
-					// 	//发送操作结果
-					// 	message: ret,
-					// 	duration: 1.5
-					// });
+					this.toast(JSON.stringify(ret));
 				});
 			},
 			isBlueEnable() {
 				var ret = sdkModule.isBlueEnable();
 				console.log(ret)
+				this.toast(JSON.stringify(ret));
 			},
 			enableBluetooth() {
 				sdkModule.enableBluetooth((ret) => {
 					//扫描回调结果
 					console.log(ret)
-					// modal.toast({
-					// 	//发送操作结果
-					// 	message: ret,
-					// 	duration: 1.5
-					// });
+					this.toast(JSON.stringify(ret));
 				});
 			},
 			disableBluetooth() {
 				sdkModule.disableBluetooth((ret) => {
 					//扫描回调结果
 					console.log(ret)
-					// modal.toast({
-					// 	//发送操作结果
-					// 	message: ret,
-					// 	duration: 1.5
-					// });
+					this.toast(JSON.stringify(ret));
 				});
 			},
 			//开始扫描
@@ -215,18 +298,15 @@
 					//暂时未启动参数查询，由SDK内进行过滤筛选
 				}, (ret) => {
 					//扫描回调结果
-					console.log(ret)
+					console.log("startScan", ret)
+					this.toast(JSON.stringify(ret));
 					if (ret.success) {
 						if (ret.data.deviceId == this.getMacAddress()) {
 							console.log('检测到指定设备', ret)
+							this.toast(JSON.stringify(ret));
 						} else {
 							console.log('检测到其他设备')
 						}
-					// 	modal.toast({
-					// 		//发送操作结果
-					// 		message: ret,
-					// 		duration: 1.5
-					// 	});
 					}
 				});
 			},
@@ -247,11 +327,7 @@
 						}, (ret) => {
 							//扫描回调结果
 							console.log("connect",ret)
-							// modal.toast({
-							// 	//发送操作结果
-							// 	message: ret,
-							// 	duration: 1.5
-							// });
+							this.toast(JSON.stringify(ret));
 						});
 					}, 3000);
 				})
@@ -260,25 +336,37 @@
 				sdkModule.disconnect((ret) => {
 					//扫描回调结果
 					console.log(ret)
-					// modal.toast({
-					// 	//发送操作结果
-					// 	message: ret,
-					// 	duration: 1.5
-					// });
+					this.toast(JSON.stringify(ret));
 				});
+			},
+			startHeartBeat() {
+				if (this.heartbeatInterval) {
+					clearInterval(this.heartbeatInterval);
+				}
+				this.heartbeatInterval = setInterval(() => {
+					sdkModule.write({
+						hexStr: '5aa500'
+					}, (ret) => {
+						console.log(ret)
+						this.toast(JSON.stringify(ret));
+					});
+				}, 2000);
+			},
+			stopHeartBeat() {
+				if (this.heartbeatInterval) {
+					clearInterval(this.heartbeatInterval);
+				}
+				this.heartbeatInterval = null;
 			},
 			startOTA() {
 				// 断开业务连接
 				sdkModule.disconnect((ret) => {
 					//扫描回调结果
 					console.log("disconnect", ret)
-					// modal.toast({
-					// 	//发送操作结果
-					// 	message: ret,
-					// 	duration: 1.5
-					// });
+					this.toast(JSON.stringify(ret));
 
 					console.log("deviceProtocol", deviceProtocol);
+					this.toast("deviceProtocol: " + deviceProtocol);
 					var connectFun = sdkModule.connect;
 					if (deviceProtocol === 16) {
 						// SPP 模式
@@ -294,11 +382,7 @@
 					}, (ret) => {
 						//扫描回调结果
 						console.log("connect", ret)
-						// modal.toast({
-						// 	//发送操作结果
-						// 	message: ret,
-						// 	duration: 1.5
-						// });
+						this.toast(JSON.stringify(ret));
 
 						// 连接失败，直接返回
 						if (!ret.success) {
@@ -323,11 +407,7 @@
 						}, (ret) => {
 							//扫描回调结果
 							console.log("startOTA", ret)
-							// modal.toast({
-							// 	//发送操作结果
-							// 	message: ret,
-							// 	duration: 1.5
-							// });
+							this.toast(JSON.stringify(ret));
 
 							// OTA 成功后，重连
 							// setTimeout(() => {
@@ -367,11 +447,7 @@
 				sdkModule.cancelOTA((ret) => {
 					//扫描回调结果
 					console.log(ret)
-					// modal.toast({
-					// 	//发送操作结果
-					// 	message: ret,
-					// 	duration: 1.5
-					// });
+					this.toast(JSON.stringify(ret));
 				});
 			},
 			startCallingRecord() {
@@ -396,13 +472,16 @@
 					(ret) => {
 						// console.log('record', ret)
 						console.log('record', ret.success, ret.data.length)
+						// this.toast('record ' + ret.success + ' ' + ret.data.length)
 						// append ret.data to pcmData
 						pcmData.push(...ret.data)
+						this.pcmDataReceived += ret.data.length
 					});
 			},
 			stopCallingRecord() {
 				sdkModule.stopRecord((ret) => {
 					console.log('stopCallingRecord', ret)
+					this.toast(JSON.stringify(ret))
 
 					// delay 5s to make sure the record is finished
 					setTimeout(() => {
@@ -432,6 +511,7 @@
 											// path on android: /storage/emulated/0/Android/data/com.android.UniPlugin/documents/pcm/plugin-demo-pcm.pcm
 											// path of fileEntry
 											console.log('fileEntry', fileEntry.fullPath);
+											this.toast('write success ' + fileEntry.fullPath);
 											// that.exportFile(fileEntry.fullPath)
 										};
 										writer.onerror = function(e) {
@@ -447,15 +527,19 @@
 										writer.write(str);
 									}, (e) => {
 										console.log('createWriter error', e);
+										this.toast('createWriter error ' + JSON.stringify(e));
 									});
 								}, (e) => {
 									console.log('getFile error', e);
+									this.toast('getFile error ' + JSON.stringify(e));
 								})
 							}, (e) => {
 								console.log('getDirectory error', e);
+								this.toast('getDirectory error ' + JSON.stringify(e));
 							})
 						}, (e) => {
 							console.log('requestFileSystem error', e);
+							this.toast('requestFileSystem error ' + JSON.stringify(e));
 						});
 					}, 5000);
 				})
@@ -466,22 +550,21 @@
 				}, (ret) => {
 					//扫描回调结果
 					console.log(ret)
-					// modal.toast({
-					// 	//发送操作结果
-					// 	message: ret,
-					// 	duration: 1.5
-					// });
+					this.toast(JSON.stringify(ret));
 				});
 			},
 			registerDataCallback() {
 				sdkModule.registerDataCallback((ret) => {
-					//扫描回调结果
 					console.log('callback', ret)
-					// modal.toast({
-					// 	//发送操作结果
-					// 	message: ret,
-					// 	duration: 1.5
-					// });
+					// this.toast(JSON.stringify(ret));
+					// if ret.data is "5bb500", it's a heartbeat response
+					if (ret.data === '5bb500') {
+						if (this.heartbeatStatusIcon === '✅') {
+							this.heartbeatStatusIcon = '❌'
+						} else {
+							this.heartbeatStatusIcon = '✅'
+						}
+					}
 				});
 			},
 			unRegisterDataCallback() {
