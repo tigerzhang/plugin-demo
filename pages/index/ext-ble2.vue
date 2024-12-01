@@ -4,6 +4,14 @@
 		<div>
 			<text>BLE蓝牙相关接口</text>
 		</div>
+		<!-- split line -->
+		<view style="border-bottom: 1px solid #ccc; margin: 10px 0;"></view>
+		<!-- a list to display scan_result -->
+		<view style="width: 100%; overflow-x: auto;">
+			<text v-for="(item, index) in scan_result" :key="index" style="display: block; border-bottom: 1px solid #ccc; padding: 5px 0; white-space: normal;" @click="handleItemClick(item)">
+				{{JSON.stringify(item)}}
+			</text>
+		</view>
 		<div>
 			<!-- heartbeat status, data length received -->
 			<text>心跳状态: {{heartbeatInterval ? '开启' : '关闭'}} {{heartbeatStatusIcon}}</text>
@@ -50,11 +58,13 @@
 				// address: "EE:11:22:33:C1:79"//By Macro
 				address: "EE:11:22:33:3D:78", // tz test device ble address
 				classicalAddress: "11:11:22:33:3D:78", // tz test device classical address
+				iosBleAddress: "A69C430A-92A5-CEDD-FFE1-B7958A028711", // tz test device ios ble address
 				// address: "EE:11:22:33:BF:84", // tz xl test device ble address
 				// classicalAddress: "11:11:22:33:BF:84" // tz xl test device classical address
 				pcmDataReceived: 0,
 				heartbeatInterval: null,
-				heartbeatStatusIcon: '❌'
+				heartbeatStatusIcon: '❌',
+				scan_result: []
 			}
 		},
 		onLoad() {
@@ -63,6 +73,22 @@
 		methods: {
 			toast(message) {
 				plus.nativeUI.toast(message);
+			},
+			handleItemClick(item) {
+				console.log('handleItemClick', item);
+				// this.toast(JSON.stringify(item));
+				// set macAddress
+				// iOS
+				if (plus.os.name === 'iOS') {
+					this.iosBleAddress = item.bleAddress;
+					this.toast('iOS ble address: ' + this.iosBleAddress);
+				} else {
+					// Android
+					this.address = item.bleAddress;
+					// spp mac address
+					this.classicalAddress = item.deviceMac;
+					this.toast('Android ble address: ' + this.address + ' spp mac address: ' + this.classicalAddress);
+				}
 			},
 			exportFile() {
 				var that = this;
@@ -155,7 +181,7 @@
 					return this.address;
 				} else if (platform === 'ios') {
 					// iOS
-					return "A69C430A-92A5-CEDD-FFE1-B7958A028711"; // tz test device ios ble address
+					return this.iosBleAddress; // tz test device ios ble address
 				}
 			},
 			microphoneRecording() {
@@ -181,50 +207,55 @@
 						//扫描回调结果
 						console.log(ret)
 						this.toast(JSON.stringify(ret));
-						// 2. 连接设备
-						sdkModule.connect({
-							/**
-							 * {"success":true,"msg":"onLeScan","data":{"mBleAddress":"1AF92E22-C653-272E-06AF-46D92E4B8963","mDeviceType":2,"mBleName":"Fuwinda 6199"}}
-							 */
-							macAddress: this.getMacAddress(),
-							deviceMac: this.classicalAddress
-						}, (ret) => {
-							console.log("connect", ret)
+						// 1.5 断开连接
+						sdkModule.disconnect((ret) => {
+							console.log('disconnect', ret);
 							this.toast(JSON.stringify(ret));
-
-							// 3. 注册回调
-							sdkModule.registerDataCallback((ret) => {
-								console.log('callback', ret)
-								// this.toast(JSON.stringify(ret));
-								// if ret.data is "5bb500", it's a heartbeat response
-								if (ret.data === '5bb500') {
-									if (this.heartbeatStatusIcon === '✅') {
-										this.heartbeatStatusIcon = '❌'
-									} else {
-										this.heartbeatStatusIcon = '✅'
-									}
-								}
-							});
-
-							// 4. 开启定时心跳
-							sdkModule.startSendBLEHeartbeatPack({
-								timeDuration: 2000
+							// 2. 连接设备
+							sdkModule.connect({
+								macAddress: this.getMacAddress(),
+								deviceMac: this.classicalAddress
 							}, (ret) => {
-								console.log('startSendBLEHeartbeatPack', ret)
-							});
+								console.log("connect", ret)
+								this.toast(JSON.stringify(ret));
 
-							// 5. 开始录音
-							// 创建一个文件，用于保存录音数据
-							isRecording = true
-							pcmData = []
-							sdkModule.sceneRecord(
-								(ret) => {
-									// console.log('record', ret)
-									console.log('record', ret.success, ret.data.length)
-									// this.toast('record ' + ret.success + ' ' + ret.data.length)
-									// append ret.data to pcmData
-									pcmData.push(...ret.data)
-									this.pcmDataReceived += ret.data.length
+								// 2.5 unregister callback
+								sdkModule.unRegisterDataCallback();
+
+								// 3. 注册回调
+								sdkModule.registerDataCallback((ret) => {
+									console.log('callback', ret)
+									// this.toast(JSON.stringify(ret));
+									// if ret.data is "5bb500", it's a heartbeat response
+									if (ret.data === '5bb500') {
+										if (this.heartbeatStatusIcon === '✅') {
+											this.heartbeatStatusIcon = '❌'
+										} else {
+											this.heartbeatStatusIcon = '✅'
+										}
+									}
+								});
+
+								// 4. 开启定时心跳
+								sdkModule.startSendBLEHeartbeatPack({
+									timeDuration: 2000
+								}, (ret) => {
+									console.log('startSendBLEHeartbeatPack', ret)
+								});
+
+								// 5. 开始录音
+								// 创建一个文件，用于保存录音数据
+								isRecording = true
+								pcmData = []
+								sdkModule.sceneRecord(
+									(ret) => {
+										// console.log('record', ret)
+										console.log('record', ret.success, ret.data.length)
+										// this.toast('record ' + ret.success + ' ' + ret.data.length)
+										// append ret.data to pcmData
+										pcmData.push(...ret.data)
+										this.pcmDataReceived += ret.data.length
+								});
 							});
 						});
 					});
@@ -289,6 +320,7 @@
 			},
 			//开始扫描
 			startScan() {
+				this.scan_result = []
 				sdkModule.startScan({
 					//暂时未启动参数查询，由SDK内进行过滤筛选
 				}, (ret) => {
@@ -296,6 +328,8 @@
 					console.log("startScan", ret)
 					this.toast(JSON.stringify(ret));
 					if (ret.success) {
+						// append to scan_result
+						this.scan_result.push(ret.data);
 						if (ret.data.deviceId == this.getMacAddress()) {
 							console.log('检测到指定设备', ret)
 							this.toast(JSON.stringify(ret));
@@ -310,9 +344,11 @@
 				sdkModule.stopScan();
 			},
 			connect() {
+				this.toast('开始连接 1');
 				sdkModule.disconnect((ret) => {
 					console.log('disconnect', ret);
 					setTimeout(() => {
+						this.toast('开始连接 2');
 						sdkModule.connect({
 							/**
 							 * {"success":true,"msg":"onLeScan","data":{"mBleAddress":"1AF92E22-C653-272E-06AF-46D92E4B8963","mDeviceType":2,"mBleName":"Fuwinda 6199"}}
@@ -335,23 +371,18 @@
 				});
 			},
 			startHeartBeat() {
-				if (this.heartbeatInterval) {
-					clearInterval(this.heartbeatInterval);
-				}
-				this.heartbeatInterval = setInterval(() => {
-					sdkModule.write({
-						hexStr: '5aa500'
-					}, (ret) => {
-						console.log(ret)
-						this.toast(JSON.stringify(ret));
-					});
-				}, 2000);
+				sdkModule.unRegisterDataCallback();
+				this.registerDataCallback();
+				sdkModule.startSendBLEHeartbeatPack({
+					timeDuration: 2000
+				}, (ret) => {
+					console.log('startSendBLEHeartbeatPack', ret)
+				});
 			},
 			stopHeartBeat() {
-				if (this.heartbeatInterval) {
-					clearInterval(this.heartbeatInterval);
-				}
-				this.heartbeatInterval = null;
+				sdkModule.stopSendBLEHeartbeatPack((ret) => {
+					console.log('stopSendBLEHeartbeatPack', ret)
+				});
 			},
 			startOTA() {
 				// 断开业务连接
