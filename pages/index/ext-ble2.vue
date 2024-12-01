@@ -537,7 +537,7 @@
 											// path on android: /storage/emulated/0/Android/data/com.android.UniPlugin/documents/pcm/plugin-demo-pcm.pcm
 											// path of fileEntry
 											console.log('fileEntry', fileEntry.fullPath);
-											this.toast('write success ' + fileEntry.fullPath);
+											that.toast('write success ' + fileEntry.fullPath);
 											// that.exportFile(fileEntry.fullPath)
 										};
 										writer.onerror = function(e) {
@@ -553,19 +553,19 @@
 										writer.write(str);
 									}, (e) => {
 										console.log('createWriter error', e);
-										this.toast('createWriter error ' + JSON.stringify(e));
+										that.toast('createWriter error ' + JSON.stringify(e));
 									});
 								}, (e) => {
 									console.log('getFile error', e);
-									this.toast('getFile error ' + JSON.stringify(e));
+									that.toast('getFile error ' + JSON.stringify(e));
 								})
 							}, (e) => {
 								console.log('getDirectory error', e);
-								this.toast('getDirectory error ' + JSON.stringify(e));
+								that.toast('getDirectory error ' + JSON.stringify(e));
 							})
 						}, (e) => {
 							console.log('requestFileSystem error', e);
-							this.toast('requestFileSystem error ' + JSON.stringify(e));
+							that.toast('requestFileSystem error ' + JSON.stringify(e));
 						});
 					}, 5000);
 				})
