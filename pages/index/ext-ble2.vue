@@ -38,6 +38,12 @@
 		<button type="primary" @click="unRegisterDataCallback">取消注册监听器</button>
 		<button type="primary" @click="decoderOpus">解码opus</button>
 		<button type="primary" @click="exportFile">导出文件</button>
+		<button type="primary" @click="textToRawPcm">文本文件转二进制 Pcm</button>
+		<button type="primary" @click="splitChannels">分离左右声道</button>
+		<button type="primary" @click="denoisePcmFile">Pcm 文件降噪</button>
+		<button type="primary" @click="waveToPcm">Wav to Pcm</button>
+		<button type="primary" @click="pcmToWav">Pcm to Wav</button>
+		<button type="primary" @click="splitChannelsTest">分离左右声道测试</button>
 	</div>
 </template>
 
@@ -49,6 +55,21 @@
 	// const modal = uni.requireNativePlugin('modal');
 	// 是否在录音
 	var isRecording = false
+	var filenameStub = 'plugin-demo-pcm'
+	///
+	/// 测试文件命名规则：
+	/// 
+	/// 坑：uniapp 不能写二进制文件，只能写字符串文件，所以录音原始数据先转成字符串保存。
+	///
+	/// 1. filenameStub + '.pcm'：录音原始数据，字符串格式，逗号分隔
+	/// 2. filenameStub + '-left.pcm': 左声道数据，字符串格式，逗号分隔
+	/// 3. filenameStub + '-right.pcm': 右声道数据，字符串格式，逗号分隔
+	/// 4. filenameStub + '-left-raw.pcm': 左声道数据，二进制格式
+	/// 5. filenameStub + '-right-raw.pcm': 右声道数据，二进制格式
+	/// 7. filenameStub + '-left-raw-denoise.pcm': 左声道数据，二进制格式，降噪后
+	/// 8. filenameStub + '-right-raw-denoise.pcm': 右声道数据，二进制格式，降噪后
+	///
+
 	// char 数据，保存录音
 	var pcmData = []
 	export default {
@@ -84,9 +105,18 @@
 					this.toast('iOS ble address: ' + this.iosBleAddress);
 				} else {
 					// Android
-					this.address = item.bleAddress;
+					this.address = "";
+					// SPP 模式下，scan 的结果没有 bleAddress，只有 deviceMAC
+					// 这里把 deviceMAC 作为 address，是为了避开 connect 接口的校验，
+					// 没有实际意义
+					if (item.bleAddress) {
+						this.address = item.bleAddress;
+					}
+					if (item.deviceMAC) {
+						this.address = item.deviceMAC;
+					}
 					// spp mac address
-					this.classicalAddress = item.deviceMac;
+					this.classicalAddress = item.deviceMAC;
 					this.toast('Android ble address: ' + this.address + ' spp mac address: ' + this.classicalAddress);
 				}
 			},
@@ -94,7 +124,7 @@
 				var that = this;
 				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
 					dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
-						dirEntry.getFile('plugin-demo-pcm.pcm', {
+						dirEntry.getFile(filenameStub + '.pcm', {
 							create: true
 						}, (fileEntry) => {
 							// path of fileEntry
@@ -326,7 +356,7 @@
 				}, (ret) => {
 					//扫描回调结果
 					console.log("startScan", ret)
-					this.toast(JSON.stringify(ret));
+					// this.toast(JSON.stringify(ret));
 					if (ret.success) {
 						// append to scan_result
 						this.scan_result.push(ret.data);
@@ -349,13 +379,12 @@
 					console.log('disconnect', ret);
 					setTimeout(() => {
 						this.toast('开始连接 2');
-						sdkModule.connect({
-							/**
-							 * {"success":true,"msg":"onLeScan","data":{"mBleAddress":"1AF92E22-C653-272E-06AF-46D92E4B8963","mDeviceType":2,"mBleName":"Fuwinda 6199"}}
-							 */
+						var connectOptions = {
 							macAddress: this.getMacAddress(),
 							deviceMac: this.classicalAddress
-						}, (ret) => {
+						};
+						console.log('connectOptions', connectOptions);
+						sdkModule.connect(connectOptions, (ret) => {
 							//扫描回调结果
 							console.log("connect",ret)
 							this.toast(JSON.stringify(ret));
@@ -518,7 +547,6 @@
 						// console.log('pcmDataArray', pcmDataArray)
 						// 写入 plugin-demo-pcm.wave 文件
 						console.log('write file', pcmDataArray.length);
-						const pcmFilePath = 'pcm/plugin-demo-pcm.wav';
 						// check is plus ready
 						if (!plus) {
 							console.log('plus is not ready');
@@ -527,7 +555,7 @@
 						var that = this;
 						plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
 							dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
-								dirEntry.getFile('plugin-demo-pcm.pcm', {
+								dirEntry.getFile(filenameStub + '.pcm', {
 									create: true
 								}, (fileEntry) => {
 									fileEntry.createWriter((writer) => {
@@ -549,7 +577,7 @@
 										// convert_comma_split_array_to_raw.py: 转化为二进制文件
 										// split-channels.py: 分离左右声道
 										var str = pcmDataArray.toString();
-										console.log('str', str);
+										// console.log('str', len(s));
 										writer.write(str);
 									}, (e) => {
 										console.log('createWriter error', e);
@@ -600,7 +628,401 @@
 				var ret = sdkModule.decoderOpus([0x00, 0x00, 0x00]);
 				console.log(ret)
 				//ret为[0x00, 0x00, 0x00]数组
+			},
+			waveToPcm() {
+				sdkModule.convertWaveToPcm({
+					wavePath: 'pcm/plugin-demo-pcm.wav',
+					pcmPath: 'pcm/plugin-demo-pcm.pcm'
+				}, (ret) => {
+					console.log(ret)
+				});
+			},
+			pcmToWav() {
+				var that = this;
+				// raw pcm file path
+				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+					dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
+						dirEntry.getFile(filenameStub + '-raw.pcm', {
+							create: true
+						}, (fileEntry) => {
+							var pcmFilepath = fileEntry.fullPath;
+							console.log('pcmFilepath', pcmFilepath);
+							var wavFilepath = pcmFilepath.replace('.pcm', '-wav.wav');
+							sdkModule.convertPcmToWave({
+								pcmPath: pcmFilepath,
+								wavPath: wavFilepath
+							}, (ret) => {
+								console.log(ret)
+								that.toast(JSON.stringify(ret));
+							});
+						}, (e) => {
+							console.log('getFile error', e);
+						})
+					}, (e) => {
+						console.log('getDirectory error', e);
+					})
+				}, (e) => {
+					console.log('requestFileSystem error', e);
+				});
+			},
+			textToRawPcm() {
+				var textFilename = filenameStub + '.pcm';
+				this.doTextToRawPcm(textFilename);
+			},
+			doTextToRawPcm(textFilename, successCallback) {
+				var that = this;
+				// string array file path
+				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+					dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
+						dirEntry.getFile(textFilename, {
+							create: true
+						}, (fileEntry) => {
+							var textFilepath = fileEntry.fullPath;
+							console.log('textFilepath', textFilepath);
+							var pcmFilepath = textFilepath.replace('.pcm', '-raw.pcm');
+							sdkModule.convertStringArrayFileToRawFile({
+								textPath: textFilepath,
+								pcmPath: pcmFilepath
+							}, (ret) => {
+								console.log(ret)
+								that.toast(JSON.stringify(ret));
+								if (successCallback) {
+									successCallback();
+								}
+							});
+						}, (e) => {
+							console.log('getFile error', e);
+						})
+					}, (e) => {
+						console.log('getDirectory error', e);
+					})
+				}, (e) => {
+					console.log('requestFileSystem error', e);
+				});
+			},
+			splitChannels() {
+				this.doSplitChannels(filenameStub);
+			},
+			doSplitChannels(myFilenameStub, successCallback) {
+				console.log('splitChannels', myFilenameStub + '.pcm');
+				// split string array pcm file to left and right channel
+				var that = this;
+				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+					dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
+						dirEntry.getFile(myFilenameStub + '.pcm', {
+							create: true
+						}, (fileEntry) => {
+							// read file
+							fileEntry.file((file) => {
+								var reader = new plus.io.FileReader();
+								reader.onloadend = function(e) {
+									var pcmData = e.target.result;
+									console.log('pcmData', pcmData.length);
+									// split pcmData by comma
+									var pcmArray = pcmData.split(',');
+									console.log('pcmArray', pcmArray.length);
+									// split pcmArray to left and right channel
+									var leftChannel = [];
+									var rightChannel = [];
+									// left channel: 0, 1, 4, 5, 8, 9...
+									// right channel: 2, 3, 6, 7, 10, 11...
+									for (var i = 0; i < pcmArray.length; i+=4) {
+										leftChannel.push(pcmArray[i]);
+										leftChannel.push(pcmArray[i + 1]);
+										rightChannel.push(pcmArray[i + 2]);
+										rightChannel.push(pcmArray[i + 3]);
+									}
+
+									// write leftChannel to left.pcm
+									var leftChannelStr = leftChannel.join(',');
+									console.log('leftChannelStr', leftChannelStr.length);
+									var that2 = that;
+									that.writeChannelDataToFile(that, leftChannelStr, myFilenameStub, 'left', () => {
+										console.log('write left success');
+										that2.toast('write left success');
+
+										// convert left string array file to raw file
+										that2.doTextToRawPcm(myFilenameStub + '-left.pcm', () => {
+											console.log('convert left success', myFilenameStub + '-left.pcm');
+											that2.toast('convert left success ' + myFilenameStub + '-left.pcm');
+
+											// write rightChannel to right.pcm
+											var rightChannelStr = rightChannel.join(',');
+											console.log('rightChannelStr', rightChannelStr.length);
+											var that3 = that2;
+											that2.writeChannelDataToFile(that2, rightChannelStr, myFilenameStub, 'right', () => {
+												console.log('write right success');
+												that3.toast('write right success');
+
+												// convert right string array file to raw file
+												that3.doTextToRawPcm(myFilenameStub + '-right.pcm', () => {
+													console.log('convert right success', myFilenameStub + '-right.pcm');
+													that3.toast('convert right success ' + myFilenameStub + '-right.pcm');
+
+													if (successCallback) {
+														successCallback();
+													}
+												});
+											});
+										});
+									});
+								};
+								reader.readAsText(file);
+							}, (e) => {
+								console.log('file error', e);
+							});
+						}, (e) => {
+							console.log('getFile error', e);
+						})
+					}, (e) => {
+						console.log('getDirectory error', e);
+					})
+				}, (e) => {
+					console.log('requestFileSystem error', e);
+				});
+			},
+			splitChannelsTest() {
+				//
+				// 生成一个长度为 200 的测试文件，用于测试分离左右声道
+				// 文件内容为：0,1,2,3,4...199
+				// 然后拆分左右声道，检查左声道文件和右声道文件是否正确
+				// 左声道的内容应该为：0,1,4,5,8,9...
+				// 右声道的内容应该为：2,3,6,7,10,11...
+				//
+				var myFilenameStub = 'plugin-demo-split-channels-test';
+				// generate test file
+				var testFileContent = '';
+				for (var i = 0; i < 200; i++) {
+					testFileContent += i + ',';
+				}
+				// 去掉最后一个逗号
+				testFileContent = testFileContent.substring(0, testFileContent.length - 1);
+				console.log('testFileContent', testFileContent.length);
+				var that = this;
+				// 写入文件 myFilenameStub + '.pcm'
+				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+					dir.root.getDirectory('pcm', {create:true}, (dirEntry) =>{
+						dirEntry.getFile(myFilenameStub + '.pcm', {
+							create: true
+						}, (fileEntry) => {
+							fileEntry.createWriter((writer) => {
+								writer.onwrite = function(e) {
+									console.log('write success', e);
+									var that2 = that;
+									// split channels
+									that.doSplitChannels(myFilenameStub, () => {
+										console.log('split channels success');
+
+										//
+										// 检查左声道文件和右声道文件是否正确
+										//
+
+										// check left channel
+										plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+											dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
+												dirEntry.getFile(myFilenameStub + '-left.pcm', {
+													create: true
+												}, (fileEntry) => {
+													// read file
+													fileEntry.file((file) => {
+														var reader = new plus.io.FileReader();
+														reader.onloadend = function(e) {
+															var pcmData = e.target.result;
+															console.log('pcmData', pcmData.length);
+															// split pcmData by comma
+															var pcmArray = pcmData.split(',');
+															console.log('pcmArray', pcmArray.length);
+
+															// check left channel
+															// 左声道的内容应该为：0,1,4,5,8,9...
+															var valPrevious = '0'
+															for (var i = 0; i < pcmArray.length; i++) {
+																var valExpected = ''
+																if (i % 2 === 0) {
+																	valExpected = '' + (i * 2);
+																} else {
+																	// valPrevious to int, and add 1
+																	valExpected = '' + (parseInt(valPrevious) + 1);
+																}
+																if (pcmArray[i] !== valExpected) {
+																	console.log('left channel error', i, pcmArray[i], valExpected);
+																	break;
+																}
+																valPrevious = pcmArray[i];
+															}
+															if (i === pcmArray.length) {
+																console.log('left channel success');
+																that2.toast('left channel success');
+															}
+														};
+														reader.readAsText(file);
+													}, (e) => {
+														console.log('file error', e);
+													});
+												}, (e) => {
+													console.log('getFile error', e);
+												})
+											}, (e) => {
+												console.log('getDirectory error', e);
+											})
+										}, (e) => {
+											console.log('requestFileSystem error', e);
+										});
+
+										// check right channel
+										plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+											dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
+												dirEntry.getFile(myFilenameStub + '-right.pcm', {
+													create: true
+												}, (fileEntry) => {
+													// read file
+													fileEntry.file((file) => {
+														var reader = new plus.io.FileReader();
+														reader.onloadend = function(e) {
+															var pcmData = e.target.result;
+															console.log('pcmData', pcmData.length);
+															// split pcmData by comma
+															var pcmArray = pcmData.split(',');
+															console.log('pcmArray', pcmArray.length);
+
+															// check right channel
+															// 右声道的内容应该为：2,3,6,7,10,11...
+															var valPrevious = '2'
+															for (var i = 0; i < pcmArray.length; i++) {
+																var valExpected = ''
+																if (i % 2 === 0) {
+																	valExpected = '' + (i * 2 + 2);
+																} else {
+																	// valPrevious to int, and add 1
+																	valExpected = '' + (parseInt(valPrevious) + 1);
+																}
+																if (pcmArray[i] !== valExpected) {
+																	console.log('right channel error', i, pcmArray[i], valExpected);
+																	break;
+																}
+																valPrevious = pcmArray[i];
+															}
+															if (i === pcmArray.length) {
+																console.log('right channel success');
+																that2.toast('right channel success');
+															}
+														};
+														reader.readAsText(file);
+													}, (e) => {
+														console.log('file error', e);
+													});
+												}, (e) => {
+													console.log('getFile error', e);
+												})
+											}, (e) => {
+												console.log('getDirectory error', e);
+											})
+										}, (e) => {
+											console.log('requestFileSystem error', e);
+										});
+									});
+								};
+								writer.onerror = function(e) {
+									console.log('write error', e);
+								};
+								console.log('write ' + testFileContent.length);
+								writer.write(testFileContent);
+							}, (e) => {
+								console.log('createWriter error', e);
+							})
+						}, (e) => {
+							console.log('getFile error', e);
+						})
+					})
+				})
+			},
+			denoisePcmFile() {
+				var that = this;
+				this.doDenoisePcmFile(filenameStub + '-left-raw.pcm', () => {
+					console.log('denoise left success');
+					that.toast('denoise left success');
+
+					var that2 = that;
+					that.doDenoisePcmFile(filenameStub + '-right-raw.pcm', () => {
+						that2.toast('denoise success');
+					});
+				});
+			},
+			doDenoisePcmFile(filename, successCallback) {
+				this.toast('denoise ' + filename);
+				var that = this;
+				// denoise left channel pcm file
+				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+					dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
+						dirEntry.getFile(filename, {
+							create: true
+						}, (fileEntry) => {
+							var pcmFilepath = fileEntry.fullPath;
+							console.log('pcmFilepath', pcmFilepath);
+							var denoiseFilepath = pcmFilepath.replace('.pcm', '-denoise.pcm');
+							sdkModule.denoisePcmFile({
+								pcmPath: pcmFilepath,
+								denoisePath: denoiseFilepath
+							}, (ret) => {
+								console.log(ret)
+								that.toast(JSON.stringify(ret));
+								if (successCallback) {
+									successCallback();
+								}
+							});
+						}, (e) => {
+							console.log('getFile error', e);
+						})
+					}, (e) => {
+						console.log('getDirectory error', e);
+					})
+				}, (e) => {
+					console.log('requestFileSystem error', e);
+				});
+			},
+			writeChannelDataToFile(that, channelDataStr, myFilenameStub, side, successCallback) {
+				console.log('writeChannelDataToFile', side, channelDataStr.length);
+
+				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+					dir.root.getDirectory('pcm', { create: true }, (dirEntry) => {
+					dirEntry.getFile(myFilenameStub + '-'+ side + '.pcm', {
+						create: true
+					}, (fileEntry) => {
+						fileEntry.createWriter((writer) => {
+							writer.onwrite=function(e) {
+								console.log('write success', e)
+								// export file
+								// path on android: /storage/emulated/0/Android/data/com.android.UniPlugin/documents/pcm/plugin-demo-pcm.pcm
+								// path of fileEntry
+								console.log('fileEntry', fileEntry.fullPath)
+								that.toast('write success '+fileEntry.fullPath)
+								// that.exportFile(fileEntry.fullPath)
+								if (successCallback) {
+									successCallback()
+								}
+							}
+							writer.onerror=function(e) {
+								console.log('write error', e)
+							}
+							console.log('write '+channelDataStr.length)
+							writer.write(channelDataStr)
+						}, (e) => {
+							console.log('createWriter error', e)
+							that.toast('createWriter error '+JSON.stringify(e))
+						})
+					}, (e) => {
+						console.log('getFile error', e)
+						that.toast('getFile error '+JSON.stringify(e))
+					})
+					}, (e) => {
+						console.log('getDirectory error', e)
+						that.toast('getDirectory error '+JSON.stringify(e))
+					})
+				}, (e) => {
+					console.log('requestFileSystem error', e)
+					that.toast('requestFileSystem error '+JSON.stringify(e))
+				})
 			}
-		}
+		},
 	}
 </script>
