@@ -37,13 +37,18 @@
 		<button type="primary" @click="registerDataCallback">注册监听器</button>
 		<button type="primary" @click="unRegisterDataCallback">取消注册监听器</button>
 		<button type="primary" @click="decoderOpus">解码opus</button>
-		<button type="primary" @click="exportFile">导出文件</button>
 		<button type="primary" @click="textToRawPcm">文本文件转二进制 Pcm</button>
 		<button type="primary" @click="splitChannels">分离左右声道</button>
 		<button type="primary" @click="denoisePcmFile">Pcm 文件降噪</button>
 		<button type="primary" @click="waveToPcm">Wav to Pcm</button>
 		<button type="primary" @click="pcmToWav">Pcm to Wav</button>
 		<button type="primary" @click="splitChannelsTest">分离左右声道测试</button>
+		<button type="primary" @click="exportFile">导出文本录音文件</button>
+		<button type="primary" @click="exportPcmFile">导出二进制PCM录音文件</button>
+		<button type="primary" @click="exportPcmLeftFile">导出声道0二进制PCM录音文件</button>
+		<button type="primary" @click="exportPcmRightFile">导出声道1二进制PCM录音文件</button>
+		<button type="primary" @click="exportPcmLeftDenoiseFile">导出声道0二进制PCM降噪文件</button>
+		<button type="primary" @click="exportPcmRightDenoiseFile">导出声道1二进制PCM降噪文件</button>
 	</div>
 </template>
 
@@ -85,7 +90,8 @@
 				pcmDataReceived: 0,
 				heartbeatInterval: null,
 				heartbeatStatusIcon: '❌',
-				scan_result: []
+				scan_result: [],
+				saved_text_filepath: ''
 			}
 		},
 		onLoad() {
@@ -121,10 +127,28 @@
 				}
 			},
 			exportFile() {
+				this.doExportFile(filenameStub + '.pcm');
+			},
+			exportPcmFile() {
+				this.doExportFile(filenameStub + '-raw.pcm');
+			},
+			exportPcmLeftFile() {
+				this.doExportFile(filenameStub + '-left-raw.pcm');
+			},
+			exportPcmRightFile() {
+				this.doExportFile(filenameStub + '-right-raw.pcm');
+			},
+			exportPcmLeftDenoiseFile() {
+				this.doExportFile(filenameStub + '-left-raw-denoise.pcm');
+			},
+			exportPcmRightDenoiseFile() {
+				this.doExportFile(filenameStub + '-right-raw-denoise.pcm');
+			},
+			doExportFile(filename) {
 				var that = this;
 				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
 					dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
-						dirEntry.getFile(filenameStub + '.pcm', {
+						dirEntry.getFile(filename, {
 							create: true
 						}, (fileEntry) => {
 							// path of fileEntry
@@ -141,31 +165,6 @@
 										console.log('open document fail', err);
 									}
 								})
-								// var UIActivityViewController = plus.ios.importClass('UIActivityViewController');
-								// var NSURL2 = plus.ios.importClass('NSURL');
-
-								// // var url = plus.ios.invoke(NSURL, 'fileURLWithPath:', fileEntry.fullPath);
-								// var url = NSURL2.fileURLWithPath(fileEntry.fullPath);
-
-								// console.log("url == ");
-								// console.log(url);
-
-								// var activityViewController = new UIActivityViewController();
-								// var activityItems = plus.ios.invoke(activityViewController, "initWithActivityItems:applicationActivities:", [url], null);
-
-								// console.log("activityItems == ");
-								// console.log(activityItems);
-
-								// var UIApplicationClass = plus.ios.importClass("UIApplication");
-								// var UIAppObj = UIApplicationClass.sharedApplication();
-								// var delegate = plus.ios.invoke(UIAppObj, "delegate");
-								// var appWindowObj = plus.ios.invoke(delegate, "window");
-								// var appRootController = plus.ios.invoke(appWindowObj, "rootViewController");
-
-								// console.log("appRootController == ");  
-								// console.log(appRootController);  
-
-								// plus.ios.invoke(appRootController, 'presentViewController:animated:completion:', activityItems, "YES", null);
 							} 
 						}, (e) => {
 							console.log('getFile error', e);
@@ -566,6 +565,7 @@
 											// path of fileEntry
 											console.log('fileEntry', fileEntry.fullPath);
 											that.toast('write success ' + fileEntry.fullPath);
+											that.saved_text_filepath = fileEntry.fullPath;
 											// that.exportFile(fileEntry.fullPath)
 										};
 										writer.onerror = function(e) {
