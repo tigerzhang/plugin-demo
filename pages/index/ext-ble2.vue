@@ -43,6 +43,12 @@
 		<button type="primary" @click="waveToPcm">Wav to Pcm</button>
 		<button type="primary" @click="pcmToWav">Pcm to Wav</button>
 		<button type="primary" @click="splitChannelsTest">分离左右声道测试</button>
+		<button type="primary" @click="classicalRecord">系统通道录音</button>
+		<button type="primary" @click="stopClassicalRecord">停止系统通道录音</button>
+		<button type="primary" @click="requestAudioRecordPermission">请求录音权限</button>
+		<button type="primary" @click="startNativeRecord">开始原生录音</button>
+		<button type="primary" @click="stopNativeRecord">结束原生录音</button>
+		<button type="primary" @click="classicalRecordDenoise">系统通道录音降噪</button>
 		<button type="primary" @click="exportFile">导出文本录音文件</button>
 		<button type="primary" @click="exportPcmFile">导出二进制PCM录音文件</button>
 		<button type="primary" @click="exportPcmLeftFile">导出声道0二进制PCM录音文件</button>
@@ -53,6 +59,17 @@
 </template>
 
 <script>
+	//必须引入的Recorder核心（文件路径是 /src/recorder-core.js 下同），使用import、require都行
+	import Recorder from 'recorder-core' //注意如果未引用Recorder变量，可能编译时会被优化删除（如vue3 tree-shaking），请改成 import 'recorder-core'，或随便调用一下 Recorder.a=1 保证强引用
+
+	import 'recorder-core/src/engine/pcm.js'
+
+	//必须引入的RecordApp核心文件（文件路径是 /src/app-support/app.js）
+	import RecordApp from 'recorder-core/src/app-support/app'
+
+	//所有平台必须引入的uni-app支持文件（如果编译出现路径错误，请把@换成 ../../ 这种）
+	import '@/uni_modules/Recorder-UniCore/app-uni-support.js'
+	
 	// 获取 module 
 	var sdkModule = uni.requireNativePlugin("XM-BesAllModule")
 	// var testModule = uni.requireNativePlugin("TestModule")
@@ -77,7 +94,13 @@
 
 	// char 数据，保存录音
 	var pcmData = []
+	var Build = plus.android.importClass("android.os.Build");
+	var Manifest = plus.android.importClass("android.Manifest");
+	var MainActivity = plus.android.runtimeMainActivity();
 	export default {
+		mounted() {
+			RecordApp.UniRenderjsRegister(this);
+		},
 		data() {
 			return {
 				// address: "94F206C6-42EE-8395-3CE1-3A8F15FA57FD"
@@ -95,11 +118,57 @@
 			}
 		},
 		onLoad() {
-
+			Recorder.a = 1
 		},
 		methods: {
+			uniPage__onShow(){ //页面onShow时【必须调用】的函数，传入当前组件this
+				RecordApp.UniPageOnShow(this);
+			},
 			toast(message) {
 				plus.nativeUI.toast(message);
+			},
+			deleteAFile(filename, callback) {
+				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+					dir.root.getDirectory('pcm', { create: true }, (dirEntry) => {
+						dirEntry.getFile(filename, {
+							create: true
+						}, (fileEntry) => {
+							fileEntry.remove((entry) => {
+								console.log('remove success', entry);
+								if (callback) {
+									callback();
+								}
+							}, (e) => {
+								console.log('remove error', e);
+							});
+						}, (e) => {
+							console.log('getFile error', e);
+						})
+					}, (e) => {
+						console.log('getDirectory error', e);
+					})
+				}, (e) => {
+					console.log('requestFileSystem error', e);
+				});
+			},
+			getAFilePath(filename, callback) {
+				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+					dir.root.getDirectory('pcm', { create: true }, (dirEntry) => {
+						dirEntry.getFile(filename, {
+							create: true
+						}, (fileEntry) => {
+							if (callback) {
+								callback(fileEntry.fullPath);
+							}
+						}, (e) => {
+							console.log('getFile error', e);
+						})
+					}, (e) => {
+						console.log('getDirectory error', e);
+					})
+				}, (e) => {
+					console.log('requestFileSystem error', e);
+				});
 			},
 			handleItemClick(item) {
 				console.log('handleItemClick', item);
@@ -125,6 +194,217 @@
 					this.classicalAddress = item.deviceMAC;
 					this.toast('Android ble address: ' + this.address + ' spp mac address: ' + this.classicalAddress);
 				}
+			},
+			classicalRecord() {
+				var that = this;
+				// 删除录音文件
+				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+					dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
+						dirEntry.getFile(filenameStub + '-sys.pcm', {
+							create: true
+						}, (fileEntry) => {
+							fileEntry.remove((entry) => {
+								console.log('remove success', entry);
+								// 重新创建文件
+								dirEntry.getFile(filenameStub + '-sys.pcm', {
+									create: true
+								}, (fileEntry) => {
+									// path of fileEntry
+									console.log('fileEntry', fileEntry.fullPath);
+
+									// 开始录音
+									that.doClassicalRecord();
+								}, (e) => {
+									console.log('getFile error', e);
+								})
+							}, (e) => {
+								console.log('remove error', e);
+							});
+						}, (e) => {
+							console.log('getFile error', e);
+						})
+					}, (e) => {
+						console.log('getDirectory error', e);
+					})
+				}, (e) => {
+					console.log('requestFileSystem error', e);
+				});
+			},
+			doClassicalRecord() {
+				RecordApp.UniWebViewActivate(this); //App环境下必须先切换成当前页面WebView
+				RecordApp.RequestPermission(()=>{
+					console.log("已获得录音权限，可以开始录音了");
+
+					pcmData = []
+
+					RecordApp.UniWebViewActivate(this);
+					RecordApp.Start({
+						type: 'pcm',
+						sampleRate: 16000,
+						bitRate: 16,
+						audioTrackSet: {
+							noiseSuppression: false, echoCancellation: false, autoGainControl: false
+						},
+						onProcess: (buffers, powerLevel, duration, sampleRate, newBufferIdx, asyncEnd) => {
+							console.log("buffers", buffers[0].length, "powerLevel", powerLevel, "duration", duration, "sampleRate", sampleRate, "newBufferIdx", newBufferIdx);
+							// console.log("buffers", buffers);
+							// buffers 是一个数组，数组长度为 1。buffers[0] 是一个 dict，这里用一个 dict 来表示一个 buffer，index 是 buffer 的序号，data 是 buffer 的数据，数据类型 unsigned short
+							// [{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0,"20":0,"21":0,"22":0,"23":0,"24":0,"25":0,"26":0,"27":0,"28":0,"29":0,"30":0,"31":0,"32":0,"33":0,"34":0,"35":0,"36":0,"37":0,"38":0,"39":0,"40":0,"41":0}]
+							// 把 buffers 转化为 Uint8Array
+							var bufferDict = buffers[0];
+							var bufferArray = [];
+							for (var key in bufferDict) {
+								// console.log("key", key);
+								bufferArray.push(bufferDict[key]);
+							}
+							// var buffer = new Uint16Array(bufferArray);
+							pcmData.push(...bufferArray);
+							// json options
+							// var options = {
+							// 	pcmData: bufferDict,
+							// 	sampleRate: sampleRate
+							// }
+							// var denoised = sdkModule.denoisePcmBufferEx(options);
+							// console.log("denoised success", denoised.success, "data len", denoised.data.length);
+							// if (denoised.success) {
+							// 	pcmData.push(...denoised.data);
+							// }
+						},
+					})
+				},(msg,isUserNotAllow)=>{
+					if(isUserNotAllow){//用户拒绝了录音权限
+						//这里你应当编写代码进行引导用户给录音权限，不同平台分别进行编写
+					}
+					console.error("请求录音权限失败："+msg);
+				});
+			},
+			stopClassicalRecord() {
+				RecordApp.Stop(null, (msg) => {
+					console.log("录音结束", msg);
+
+					// 添加 denoised.data 到文件 filepath
+					plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+						dir.root.getDirectory('pcm', {create:true}, (dirEntry) => {
+							dirEntry.getFile(filenameStub + '-sys.pcm', {
+								create: true
+							}, (fileEntry) => {
+								fileEntry.createWriter((writer) => {
+									writer.onwrite = function(e) {
+										console.log('write success', e);
+									};
+									writer.onerror = function(e) {
+										console.log('write error', e);
+									};
+									console.log('write ' + pcmData.length);
+									writer.write(pcmData.toString());
+								}, (e) => {
+									console.log('createWriter error', e);
+								});
+							}, (e) => {
+								console.log('getFile error', e);
+							})
+						}, (e) => {
+							console.log('getDirectory error', e);
+						})
+					}, (e) => {
+						console.log('requestFileSystem error', e);
+					});
+				})
+			},
+			requestPermissionAndroid(permission) {
+				if (Build.VERSION.SDK_INT >= 23) {
+					if (MainActivity.checkSelfPermission(permission) == -1) {
+						// Request the permission
+						MainActivity.requestPermissions([permission], 1);
+						
+						// Optional: Add permission result callback
+						plus.globalEvent.addEventListener('onRequestPermissionsResult', (e) => {
+							if (e.requestCode == 1) { // Match the request code we used
+								if (e.grantResults[0] == 0) { // Permission granted
+									this.toast("Permission granted");
+								} else {
+									this.toast("Permission denied");
+								}
+							}
+						});
+						
+						return false;
+					}
+				}
+				return true;
+			},
+			requestAudioPermissionIos() {
+				// Import required iOS classes
+				var AVAudioSession = plus.ios.importClass("AVAudioSession");
+				var session = AVAudioSession.sharedInstance();
+				
+				// Request recording permission
+				session.requestRecordPermission((granted) => {
+					if (granted) {
+						this.toast("Recording permission granted");
+					} else {
+						this.toast("Recording permission denied");
+						
+						// Open app settings if permission denied
+						var NSURL = plus.ios.importClass('NSURL');
+						var UIApplication = plus.ios.importClass('UIApplication');
+						
+						var settingsUrl = NSURL.URLWithString('app-settings:');
+						var application = UIApplication.sharedApplication();
+						
+						if (application.canOpenURL(settingsUrl)) {
+							application.openURL(settingsUrl);
+						}
+					}
+				});
+			},
+			requestAudioRecordPermission() {
+				if (plus.os.name === 'iOS') {
+					this.requestAudioPermissionIos();
+				} else {
+					this.requestPermissionAndroid(Manifest.permission.RECORD_AUDIO);
+				}
+			},
+			startNativeRecord() {
+				this.requestAudioRecordPermission();
+
+				var that = this;
+				this.deleteAFile(filenameStub + '-sys-raw.pcm', () => {
+					that.deleteAFile(filenameStub + '-sys-raw-denoise.pcm', () => {
+						plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+							that.getAFilePath(filenameStub + '-sys-raw.pcm', (fullPath) => {
+								var denoiseFilepath = fullPath.replace('-raw.pcm', '-raw-denoise.pcm');
+								sdkModule.startAudioRecord({
+									pcmPath: fullPath // 调试用，如果传入 ""，则不保存文件
+								}, (ret) => {
+									console.log('startAudioRecord', ret.msg)
+									if (ret.data && ret.data.length > 0) {
+										console.log('startAudioRecord', ret.data.length)
+										// console.log('startAudioRecord', ret.data)
+										// convert to Uint8Array
+										// var buffer = new Uint8Array(ret.data);
+										// console.log('startAudioRecord', buffer.length)
+										var denoiseResult = sdkModule.denoisePcmBufferEx({
+											sampleRate: 16000,
+											pcmData: ret.data,
+											pcmPath: denoiseFilepath // 调试用，如果传入 ""，则不保存文件
+										})
+										console.log('denoisePcmBufferEx', denoiseResult.success, denoiseResult.data.length)
+									}
+								})
+							})
+						})
+					})
+				})
+			},
+			stopNativeRecord() {
+				sdkModule.stopAudioRecord((ret) => {
+					console.log('stopAudioRecord', ret.msg)
+					// toast
+					this.toast(ret.msg);
+				})
+			},
+			classicalRecordDenoise() {
 			},
 			exportFile() {
 				this.doExportFile(filenameStub + '.pcm');
@@ -1026,3 +1306,30 @@
 		},
 	}
 </script>
+
+<!-- #ifdef APP -->
+<script module="yourModuleName" lang="renderjs"> //此模块内部只能用选项式API风格，vue2、vue3均可用，请照抄这段代码；不可改成setup组合式API风格，否则可能不能import vue导致编译失败
+/**需要编译成App时，你需要添加一个renderjs模块，然后一模一样的import上面那些js（微信的js除外）
+    ，因为App中默认是在renderjs（WebView）中进行录音和音频编码**/
+import 'recorder-core'
+import RecordApp from 'recorder-core/src/app-support/app'
+import '../../uni_modules/Recorder-UniCore/app-uni-support.js' //renderjs中似乎不支持"@/"打头的路径，如果编译路径错误请改正路径即可
+
+//按需引入你需要的录音格式支持文件，和插件
+import 'recorder-core/src/engine/mp3'
+import 'recorder-core/src/engine/mp3-engine' 
+
+import 'recorder-core/src/extensions/waveview'
+
+export default {
+    mounted(){
+        //App的renderjs必须调用的函数，传入当前模块this
+        RecordApp.UniRenderjsRegister(this);
+    },
+    methods: {
+        //这里定义的方法，在逻辑层中可通过 RecordApp.UniWebViewVueCall(this,'this.xxxFunc()') 直接调用
+        //调用逻辑层的方法，请直接用 this.$ownerInstance.callMethod("xxxFunc",{args}) 调用，二进制数据需转成base64来传递
+    }
+}
+</script>
+<!-- #endif -->
