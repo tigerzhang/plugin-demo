@@ -45,10 +45,19 @@
 		<button type="primary" @click="splitChannelsTest">分离左右声道测试</button>
 		<button type="primary" @click="classicalRecord">系统通道录音</button>
 		<button type="primary" @click="stopClassicalRecord">停止系统通道录音</button>
+
+		<!-- splitter -->
+		<view style="border-bottom: 1px solid #ccc; margin: 10px 0;"></view>
+
 		<button type="primary" @click="requestAudioRecordPermission">请求录音权限</button>
 		<button type="primary" @click="startNativeRecord">开始原生录音</button>
 		<button type="primary" @click="stopNativeRecord">结束原生录音</button>
-		<button type="primary" @click="classicalRecordDenoise">系统通道录音降噪</button>
+		<button type="primary" @click="exportNativeRecordFile">导出原生录音文件</button>
+		<button type="primary" @click="exportNativeRecordDenoisedFile">导出原生录音降噪文件</button>
+
+		<!-- splitter -->
+		<view style="border-bottom: 1px solid #ccc; margin: 10px 0;"></view>
+
 		<button type="primary" @click="exportFile">导出文本录音文件</button>
 		<button type="primary" @click="exportPcmFile">导出二进制PCM录音文件</button>
 		<button type="primary" @click="exportPcmLeftFile">导出声道0二进制PCM录音文件</button>
@@ -94,9 +103,6 @@
 
 	// char 数据，保存录音
 	var pcmData = []
-	var Build = plus.android.importClass("android.os.Build");
-	var Manifest = plus.android.importClass("android.Manifest");
-	var MainActivity = plus.android.runtimeMainActivity();
 	export default {
 		mounted() {
 			RecordApp.UniRenderjsRegister(this);
@@ -141,6 +147,25 @@
 							}, (e) => {
 								console.log('remove error', e);
 							});
+						}, (e) => {
+							console.log('getFile error', e);
+						})
+					}, (e) => {
+						console.log('getDirectory error', e);
+					})
+				}, (e) => {
+					console.log('requestFileSystem error', e);
+				});
+			},
+			createAFile(filename, callback) {
+				plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+					dir.root.getDirectory('pcm', { create: true }, (dirEntry) => {
+						dirEntry.getFile(filename, {
+							create: true
+						}, (fileEntry) => {
+							if (callback) {
+								callback(fileEntry.fullPath);
+							}
 						}, (e) => {
 							console.log('getFile error', e);
 						})
@@ -312,6 +337,8 @@
 				})
 			},
 			requestPermissionAndroid(permission) {
+				var Build = plus.android.importClass("android.os.Build");
+				var MainActivity = plus.android.runtimeMainActivity();
 				if (Build.VERSION.SDK_INT >= 23) {
 					if (MainActivity.checkSelfPermission(permission) == -1) {
 						// Request the permission
@@ -336,32 +363,50 @@
 			requestAudioPermissionIos() {
 				// Import required iOS classes
 				var AVAudioSession = plus.ios.importClass("AVAudioSession");
-				var session = AVAudioSession.sharedInstance();
 				
-				// Request recording permission
-				session.requestRecordPermission((granted) => {
-					if (granted) {
-						this.toast("Recording permission granted");
-					} else {
-						this.toast("Recording permission denied");
-						
-						// Open app settings if permission denied
-						var NSURL = plus.ios.importClass('NSURL');
-						var UIApplication = plus.ios.importClass('UIApplication');
-						
-						var settingsUrl = NSURL.URLWithString('app-settings:');
-						var application = UIApplication.sharedApplication();
-						
-						if (application.canOpenURL(settingsUrl)) {
-							application.openURL(settingsUrl);
-						}
+				// Fallback to older AVAudioSession API for backward compatibility
+				var session = AVAudioSession.sharedInstance();
+				// check permission
+				var permission = session.recordPermission();
+				if (permission == 0) {
+					this.toast("Recording permission granted");
+				} else if (permission == 1) {
+					this.toast("Recording permission denied");
+				} else {
+					// Request permission
+					session.requestRecordPermission((granted) => {
+						this.handlePermissionResult(granted);
+					});
+				}
+			},
+			handlePermissionResult(granted) {
+				console.log("handlePermissionResult", granted);
+				// if granted is undefined, it means the permission is already granted
+				if (granted === undefined) {
+					granted = true;
+				}
+				if (granted) {
+					this.toast("Recording permission granted");
+				} else {
+					this.toast("Recording permission denied");
+					
+					// Open app settings if permission denied
+					var NSURL = plus.ios.importClass('NSURL');
+					var UIApplication = plus.ios.importClass('UIApplication');
+					
+					var settingsUrl = NSURL.URLWithString('app-settings:');
+					var application = UIApplication.sharedApplication();
+					
+					if (application.canOpenURL(settingsUrl)) {
+						application.openURL(settingsUrl);
 					}
-				});
+				}
 			},
 			requestAudioRecordPermission() {
 				if (plus.os.name === 'iOS') {
 					this.requestAudioPermissionIos();
 				} else {
+					var Manifest = plus.android.importClass("android.Manifest");
 					this.requestPermissionAndroid(Manifest.permission.RECORD_AUDIO);
 				}
 			},
@@ -371,26 +416,34 @@
 				var that = this;
 				this.deleteAFile(filenameStub + '-sys-raw.pcm', () => {
 					that.deleteAFile(filenameStub + '-sys-raw-denoise.pcm', () => {
-						plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
-							that.getAFilePath(filenameStub + '-sys-raw.pcm', (fullPath) => {
-								var denoiseFilepath = fullPath.replace('-raw.pcm', '-raw-denoise.pcm');
-								sdkModule.startAudioRecord({
-									pcmPath: fullPath // 调试用，如果传入 ""，则不保存文件
-								}, (ret) => {
-									console.log('startAudioRecord', ret.msg)
-									if (ret.data && ret.data.length > 0) {
-										console.log('startAudioRecord', ret.data.length)
-										// console.log('startAudioRecord', ret.data)
-										// convert to Uint8Array
-										// var buffer = new Uint8Array(ret.data);
-										// console.log('startAudioRecord', buffer.length)
-										var denoiseResult = sdkModule.denoisePcmBufferEx({
-											sampleRate: 16000,
-											pcmData: ret.data,
-											pcmPath: denoiseFilepath // 调试用，如果传入 ""，则不保存文件
-										})
-										console.log('denoisePcmBufferEx', denoiseResult.success, denoiseResult.data.length)
-									}
+						that.createAFile(filenameStub + '-sys-raw-denoise.pcm', (filepath) => {
+							console.log('createAFile', filepath);
+							plus.io.requestFileSystem(plus.io.PUBLIC_DOCUMENTS, (dir) => {
+								that.getAFilePath(filenameStub + '-sys-raw.pcm', (fullPath) => {
+									var denoiseFilepath = fullPath.replace('-raw.pcm', '-raw-denoise.pcm');
+									sdkModule.startAudioRecord({
+										pcmPath: fullPath // 调试用，如果传入 ""，则不保存文件
+									}, (ret) => {
+										console.log('startAudioRecord', ret.msg)
+										if (ret.data && ret.data.length > 0) {
+											console.log('startAudioRecord', ret.data.length)
+											// console.log('startAudioRecord', ret.data)
+											// convert to Uint8Array
+											// var buffer = new Uint8Array(ret.data);
+											// console.log('startAudioRecord', buffer.length)
+											var denoiseResult = sdkModule.denoisePcmBufferEx({
+												sampleRate: 16000,
+												pcmData: ret.data,
+												pcmPath: denoiseFilepath // 调试用，如果传入 ""，则不保存文件
+											})
+											// check if denoiseResult is undefined
+											if (denoiseResult === undefined) {
+												console.log('denoisePcmBufferEx', 'denoiseResult is undefined')
+											} else {
+												console.log('denoisePcmBufferEx', denoiseResult.success, denoiseResult.data.length)
+											}
+										}
+									})
 								})
 							})
 						})
@@ -404,7 +457,11 @@
 					this.toast(ret.msg);
 				})
 			},
-			classicalRecordDenoise() {
+			exportNativeRecordFile() {
+				this.doExportFile(filenameStub + '-sys-raw.pcm');
+			},
+			exportNativeRecordDenoisedFile() {
+				this.doExportFile(filenameStub + '-sys-raw-denoise.pcm');
 			},
 			exportFile() {
 				this.doExportFile(filenameStub + '.pcm');
