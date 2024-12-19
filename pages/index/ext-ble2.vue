@@ -1894,6 +1894,30 @@
 					}
 
 					console.log('remainedData', remainedData.length);
+
+					// if the length of remainedData is larger than 1280 * 2 bytes,
+					// handle the remainedData again
+
+					while (remainedData.length > dataLength) {
+						var data = remainedData.slice(0, dataLength);
+						remainedData = remainedData.slice(dataLength);
+
+						console.log('testDenoisePcm16k', data);
+						var denoiseResult = sdkModule.denoisePcmBufferEx({
+							sampleRate: 16000,
+							pcmData: data,
+							pcmPath: "" // 调试用，如果传入 ""，则不保存文件
+						});
+
+						// check if denoiseResult is undefined
+						if (denoiseResult === undefined) {
+							console.log('denoisePcmBufferEx', 'denoiseResult is undefined')
+						} else {
+							console.log('denoisePcmBufferEx', denoiseResult.success, denoiseResult.data.length)
+						}
+
+						console.log('remainedData', remainedData.length);
+					}
 				}
 			}
 		},
