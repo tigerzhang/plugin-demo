@@ -1863,8 +1863,6 @@
 				var remainedData = [];
 
 				// iterate testData as an array
-
-				// iterate testData as an array
 				for (var index in testData) {
 					// append data to remainedData
 					remainedData.push(...testData[index]);
