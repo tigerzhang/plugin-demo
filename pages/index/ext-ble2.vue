@@ -1880,13 +1880,18 @@
 					remainedData = remainedData.slice(dataLength);
 
 					console.log('testDenoisePcm16k', data);
-					sdkModule.denoisePcmBufferEx({
+					var denoiseResult = sdkModule.denoisePcmBufferEx({
 						sampleRate: 16000,
 						pcmData: data,
 						pcmPath: "" // 调试用，如果传入 ""，则不保存文件
-					}, (ret) => {
-						console.log(ret)
 					});
+
+					// check if denoiseResult is undefined
+					if (denoiseResult === undefined) {
+						console.log('denoisePcmBufferEx', 'denoiseResult is undefined')
+					} else {
+						console.log('denoisePcmBufferEx', denoiseResult.success, denoiseResult.data.length)
+					}
 
 					console.log('remainedData', remainedData.length);
 				}
