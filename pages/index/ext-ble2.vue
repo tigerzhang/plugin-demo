@@ -1879,7 +1879,7 @@
 					var data = remainedData.slice(0, dataLength);
 					remainedData = remainedData.slice(dataLength);
 
-					console.log('testDenoisePcm16k', testData);
+					console.log('testDenoisePcm16k', data);
 					sdkModule.denoisePcmBufferEx({
 						sampleRate: 16000,
 						pcmData: data,
