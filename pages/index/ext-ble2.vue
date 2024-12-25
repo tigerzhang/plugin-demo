@@ -60,8 +60,6 @@
 		<button type="primary" @click="textToRawPcm">文本文件转二进制 Pcm</button>
 		<button type="primary" @click="splitChannels">分离左右声道</button>
 		<button type="primary" @click="denoisePcmFile">Pcm 文件降噪</button>
-		<button type="primary" @click="waveToPcm">Wav to Pcm</button>
-		<button type="primary" @click="pcmToWav">Pcm to Wav</button>
 		<button type="primary" @click="splitChannelsTest">分离左右声道测试</button>
 		<button type="primary" @click="classicalRecord">系统通道录音</button>
 		<button type="primary" @click="stopClassicalRecord">停止系统通道录音</button>
@@ -89,6 +87,11 @@
 		<view style="border-bottom: 1px solid #ccc; margin: 10px 0;"></view>
 
 		<button type="primary" @click="testDenoisePcm16k">测试 16kHz pcm 降噪</button>
+
+		<!-- splitter -->
+		<view style="border-bottom: 1px solid #ccc; margin: 10px 0;"></view>
+
+		<button type="primary" @click="getDeviceKey">获取设备密钥</button>
 	</div>
 </template>
 
@@ -1130,6 +1133,7 @@
 			//初始化
 			initBleSDK() {
 				// testModule.init();
+				var that = this;
 				console.log("initBleSDK os", plus.os.name);
 				if (plus.os.name === 'iOS') {
 					// iOS 平台
@@ -1143,6 +1147,7 @@
 						enableDenoise: true
 					}, (ret) => {
 						console.log('init', ret);
+						that.toast(JSON.stringify(ret));
 					});
 				}
 
@@ -1919,6 +1924,11 @@
 						console.log('remainedData', remainedData.length);
 					}
 				}
+			},
+			getDeviceKey() {
+				sdkModule.getDecryptedDeviceKey((ret) => {
+					console.log('getDecryptedDeviceKey', ret);
+				})
 			}
 		},
 	}
