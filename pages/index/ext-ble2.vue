@@ -1940,6 +1940,14 @@
 				sdkModule.getConnectedEarphones((ret) => {
 					console.log('getConnectedEarphone', ret);
 					this.toast(JSON.stringify(ret));
+					if (ret.success) {
+						if (ret.data.length > 0) {
+							console.log('已连接耳机 ' + ret.data[0].name + ' mac ' + ret.data[0].address);
+							setTimeout(() => {
+								this.toast('已连接耳机 ' + ret.data[0].name + ' mac ' + ret.data[0].address);
+							}, 4000);
+						}
+					}
 				})
 			}
 		},
