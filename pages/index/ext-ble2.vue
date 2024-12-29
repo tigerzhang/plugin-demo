@@ -92,6 +92,11 @@
 		<view style="border-bottom: 1px solid #ccc; margin: 10px 0;"></view>
 
 		<button type="primary" @click="getDeviceKey">获取设备密钥</button>
+
+		<!-- splitter -->
+		<view style="border-bottom: 1px solid #ccc; margin: 10px 0;"></view>
+
+		<button type="primary" @click="getConnectedEarphones">获取已绑定连接的耳机</button>
 	</div>
 </template>
 
@@ -1928,6 +1933,13 @@
 			getDeviceKey() {
 				sdkModule.getDecryptedDeviceKey((ret) => {
 					console.log('getDecryptedDeviceKey', ret);
+					this.toast(JSON.stringify(ret));
+				})
+			},
+			getConnectedEarphones() {
+				sdkModule.getConnectedEarphones((ret) => {
+					console.log('getConnectedEarphone', ret);
+					this.toast(JSON.stringify(ret));
 				})
 			}
 		},
