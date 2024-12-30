@@ -137,6 +137,8 @@
 	// char 数据，保存录音
 	var pcmData = []
 
+	var addressFromPiredDevice = ''
+
 	var testData = [
 		[
 			160, 47, 53, 13, 157, 216, 141, 247, 153, 14, 91, 246, 207, 247, 181, 8, 83,
@@ -1196,8 +1198,12 @@
 			//开始扫描
 			startScan() {
 				this.scan_result = []
+				// addressFromPiredDevice 调用 getConnectedEarphones 获取
+				// 这个参数仅用于 iOS 上过滤设备，Android 不需要用。
+				// 如果在 Android 上传入这个参数，会被忽略。
 				sdkModule.startScan({
 					//暂时未启动参数查询，由SDK内进行过滤筛选
+					address: addressFromPiredDevice
 				}, (ret) => {
 					//扫描回调结果
 					console.log("startScan", ret)
@@ -1943,6 +1949,7 @@
 					if (ret.success) {
 						if (ret.data.length > 0) {
 							console.log('已连接耳机 ' + ret.data[0].name + ' mac ' + ret.data[0].address);
+							addressFromPiredDevice = ret.data[0].address;
 							setTimeout(() => {
 								this.toast('已连接耳机 ' + ret.data[0].name + ' mac ' + ret.data[0].address);
 							}, 4000);
