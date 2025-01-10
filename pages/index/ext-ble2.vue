@@ -50,6 +50,11 @@
 		<!-- splitter -->
 		<view style="border-bottom: 1px solid #ccc; margin: 10px 0;"></view>
 
+		<button type="primary" @click="getCallingStatus">获取通话状态</button>
+
+		<!-- splitter -->
+		<view style="border-bottom: 1px solid #ccc; margin: 10px 0;"></view>
+
 		<button type="primary" @click="startCallingRecord">开始通话录音</button>
 		<button type="primary" @click="stopCallingRecord">结束录音</button>
 		<button type="primary" @click="startMicrophoneRecord">开始麦克风录音</button>
@@ -1456,6 +1461,14 @@
 				}, (ret) => {
 					//扫描回调结果
 					console.log(ret)
+					this.toast(JSON.stringify(ret));
+				});
+			},
+			getCallingStatus() {
+				sdkModule.write({
+					hexStr: '5aa504'
+				}, (ret) => {
+					console.log('getCallingStatus', ret)
 					this.toast(JSON.stringify(ret));
 				});
 			},
