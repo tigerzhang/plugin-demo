@@ -1301,7 +1301,7 @@
 						}
 
 						// 调用异步方法
-						var filePath = plus.io.convertLocalFileSystemURL('/static/HTS283_BS685HL_2500YP_SW_V3.2_release_converted.bin') //pdf文件所在路径
+						var filePath = plus.io.convertLocalFileSystemURL('/static/HTS283_BS685HL_2500YP_SW_V3.7_release_converted.bin') //pdf文件所在路径
 						console.log(filePath)
 						sdkModule.startOTA({
 							localPath: filePath, //mac地址
@@ -1471,6 +1471,13 @@
 					console.log('getCallingStatus', ret)
 					this.toast(JSON.stringify(ret));
 				});
+				// sleep 3s
+				setTimeout(() => {
+					sdkModule.getRecordStatus((ret) => {
+						console.log('getRecordStatus', ret)
+						this.toast(JSON.stringify(ret));
+					});
+				}, 3000);
 			},
 			registerDataCallback() {
 				sdkModule.registerDataCallback((ret) => {
